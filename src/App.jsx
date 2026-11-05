@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getMyProfile, findUserByPhone, listMyConversations, createConversation, addConversationMember, fetchMessages, sendMessage, subscribeToMessages } from './lib/chatService';
 import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault, listenForChatDownloads } from './lib/localVault';
-import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw } from 'lucide-react';
+import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw, QrCode, Contact, UserPlus, Camera, X } from 'lucide-react';
+import QRCode from 'qrcode';
 
 const initialChats = [
   { name: 'Pusti Consumer Team', message: 'আজকের মিটিংয়ের সময় জানানো হবে।', time: '10:42', unread: 3, group: true, color: 'mint' },
@@ -104,7 +105,7 @@ function StoragePanel({ lang }) {
 }
 
 
-function FeatureWorkspace({ active, lang, groups = [], onCreateGroup, onOpenGroup, onAddGroupMembers }) {
+function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup, onOpenGroup, onAddGroupMembers }) {
   const tr = (bn,en) => lang === 'bn' ? bn : en;
   const [groupPhones,setGroupPhones] = useState('');
   const [groupName,setGroupName] = useState('');
@@ -113,8 +114,77 @@ function FeatureWorkspace({ active, lang, groups = [], onCreateGroup, onOpenGrou
   const [secret,setSecret] = useState('');
   const [unlocked,setUnlocked] = useState(false);
   const [search,setSearch] = useState('');
+  const [memberGroup,setMemberGroup] = useState(null);
+  const [memberMode,setMemberMode] = useState('manual');
+  const [memberPhones,setMemberPhones] = useState('');
+  const [memberBusy,setMemberBusy] = useState(false);
+  const [qrData,setQrData] = useState('');
+  const [showMyQr,setShowMyQr] = useState(false);
+  const [myQr,setMyQr] = useState('');
+  const [scannerOn,setScannerOn] = useState(false);
+  const [scannerError,setScannerError] = useState('');
+  const videoRef = useRef(null);
+  const scanStreamRef = useRef(null);
   const isGroups = active === 'groups';
   const isCalls = active === 'calls';
+  useEffect(() => {
+    if (!showMyQr || !myProfile?.phone) return;
+    QRCode.toDataURL('HTCUSER:' + myProfile.phone, { width: 260, margin: 2 }).then(setMyQr).catch(() => setMyQr(''));
+  }, [showMyQr, myProfile?.phone]);
+  useEffect(() => {
+    if (!scannerOn) return;
+    let active = true;
+    let detector;
+    let timer;
+    async function start() {
+      try {
+        if (!('BarcodeDetector' in window)) throw new Error(tr('এই ফোনের ব্রাউজারে QR স্ক্যান সমর্থিত নয়।','QR scanning is not supported by this phone browser.'));
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+        scanStreamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+        timer = window.setInterval(async () => {
+          if (!active || !videoRef.current || videoRef.current.readyState < 2) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length) {
+              const raw = codes[0].rawValue || '';
+              const phone = raw.startsWith('HTCUSER:') ? raw.slice(8) : raw;
+              if (/^\\+?[0-9]{7,15}$/.test(phone.replace(/[\\s()-]/g,''))) {
+                setMemberPhones(phone.replace(/[\\s()-]/g,''));
+                setMemberMode('manual');
+                setScannerOn(false);
+                setNotice(tr('QR কোড পাওয়া গেছে। এখন সদস্য যোগ করুন চাপুন।','QR found. Now tap Add member.'));
+              } else setScannerError(tr('QR কোডটি Happy Time Connect ব্যবহারকারীর নয়।','This QR code is not a Happy Time Connect user code.'));
+            }
+          } catch {}
+        }, 450);
+      } catch (error) { setScannerError(error.message || 'Camera could not start.'); }
+    }
+    start();
+    return () => { active = false; if (timer) clearInterval(timer); scanStreamRef.current?.getTracks().forEach(track => track.stop()); scanStreamRef.current = null; };
+  }, [scannerOn]);
+  async function pickContacts() {
+    try {
+      if (!('contacts' in navigator) || !('select' in navigator.contacts)) throw new Error(tr('এই ডিভাইসে Contacts Picker নেই। নিচে ফোন নম্বর লিখুন।','Contacts picker is unavailable on this device. Enter a phone number below.'));
+      const contacts = await navigator.contacts.select(['name','tel'], { multiple: true });
+      const numbers = contacts.flatMap(contact => contact.tel || []).map(value => value.trim()).filter(Boolean);
+      if (!numbers.length) throw new Error(tr('নির্বাচিত Contacts-এ ফোন নম্বর নেই।','Selected contacts have no phone numbers.'));
+      setMemberPhones(numbers.join(', '));
+      setMemberMode('manual');
+      setNotice(tr('Contacts থেকে নম্বর নেওয়া হয়েছে। এখন সদস্য যোগ করুন।','Numbers imported from Contacts. Tap Add member.'));
+    } catch (error) { setNotice(error.message || 'Could not read contacts.'); }
+  }
+  async function submitMemberAdd() {
+    if (!memberGroup || !memberPhones.trim()) return;
+    setMemberBusy(true);
+    try {
+      await onAddGroupMembers(memberGroup, memberPhones);
+      setNotice(tr('সদস্য সফলভাবে যোগ হয়েছে।','Member added successfully.'));
+      setMemberGroup(null); setMemberPhones(''); setScannerOn(false);
+    } catch (error) { setNotice(error.message || 'Could not add member.'); }
+    finally { setMemberBusy(false); }
+  }
   const title = isGroups ? tr('আপনার গ্রুপসমূহ','Your Groups') : isCalls ? tr('কল ও মিটিং','Calls & Meetings') : tr('প্রাইভেট চ্যাট','Private Chat');
   const subtitle = isGroups ? tr('পরিবার, বন্ধু ও কাজের দলের জন্য আলাদা জায়গা','A space for family, friends and teams') : isCalls ? tr('অডিও ও ভিডিও যোগাযোগের কেন্দ্র','Your audio and video communication hub') : tr('গোপন কোড দিয়ে সুরক্ষিত ব্যক্তিগত জায়গা','A protected space with a secret code');
   return <section className="feature-workspace">
@@ -126,8 +196,24 @@ function FeatureWorkspace({ active, lang, groups = [], onCreateGroup, onOpenGrou
       <div className="feature-toolbar"><div><h3>{tr('গ্রুপ তালিকা','Group list')}</h3><p>{tr('আপনার তৈরি করা গ্রুপগুলো','Groups you create')}</p></div><button className="feature-primary" onClick={()=>setShowCreate(v=>!v)}><Plus size={17}/>{tr('নতুন গ্রুপ','New group')}</button></div>
       {showCreate && <form className="feature-create panel-card" onSubmit={async e=>{e.preventDefault();if(!groupName.trim())return;try{await onCreateGroup(groupName.trim(),groupPhones);setGroupName('');setGroupPhones('');setShowCreate(false);setNotice(tr('গ্রুপ তৈরি হয়েছে। এখন চ্যাট ট্যাবে মেসেজ পাঠাতে পারবেন।','Group created. You can now message in the Chats tab.'));}catch(error){setNotice(error.message||'Could not create group.');}}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><input value={groupPhones} onChange={e=>setGroupPhones(e.target.value)} placeholder={tr('সদস্যদের ফোন নম্বর, কমা দিয়ে আলাদা করুন (+880...)','Member phone numbers, comma separated (+880...)')}/><button className="feature-primary" type="submit">{tr('গ্রুপ তৈরি করুন','Create group')}</button></form>}
       <div className="feature-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr('গ্রুপ খুঁজুন','Search groups')}/></div>
-      <div className="feature-card-grid">{groups.filter(g=>(g.title||'').toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.id}><div className={'feature-item-icon '+(i%2?'blue':'mint')}><Users size={23}/></div><div className="feature-item-title"><h3>{g.title||'Group'}</h3><span>{g.members?.length||1} {tr('জন সদস্য','members')}</span></div><p>{g.lastMessage?.body||tr('এখনো কোনো মেসেজ নেই','No messages yet')}</p><button onClick={()=>onOpenGroup(g)}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button><button onClick={async()=>{const phones=window.prompt(tr('যাদের যোগ করবেন তাদের ফোন নম্বর কমা দিয়ে লিখুন','Enter phone numbers to add, separated by commas'));if(phones)try{await onAddGroupMembers(g,phones);setNotice(tr('সদস্য যোগ হয়েছে।','Members added.'));}catch(error){setNotice(error.message||'Could not add members.');}}}>{tr('সদস্য যোগ','Add members')}</button></article>)}</div>
+      <div className="feature-card-grid">{groups.filter(g=>(g.title||'').toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.id}><div className={'feature-item-icon '+(i%2?'blue':'mint')}><Users size={23}/></div><div className="feature-item-title"><h3>{g.title||'Group'}</h3><span>{g.members?.length||1} {tr('জন সদস্য','members')}</span></div><p>{g.lastMessage?.body||tr('এখনো কোনো মেসেজ নেই','No messages yet')}</p><button onClick={()=>onOpenGroup(g)}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button><button onClick={()=>{setMemberGroup(g);setMemberPhones('');setMemberMode('manual');setScannerError('');setScannerOn(false);}}><UserPlus size={15}/> {tr('সদস্য যোগ','Add members')}</button></article>)}</div>
       {!groups.length&&<div className="feature-notice">{tr('এখনো কোনো গ্রুপ নেই। নতুন গ্রুপ তৈরি করুন।','No groups yet. Create your first group.')}</div>}
+      {memberGroup && <div className="member-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="member-modal panel-card">
+          <div className="member-modal-head"><div><span className="feature-kicker">GROUP MEMBERS</span><h3>{tr('সদস্য যোগ করুন','Add group members')}</h3><p>{memberGroup.title}</p></div><button className="icon-btn" onClick={()=>{setMemberGroup(null);setScannerOn(false);}} aria-label="Close"><X size={20}/></button></div>
+          <div className="member-methods">
+            <button className={memberMode==='manual'?'active':''} onClick={()=>{setMemberMode('manual');setScannerOn(false);}}><UserPlus size={18}/>{tr('নম্বর লিখুন','Enter number')}</button>
+            <button onClick={pickContacts}><Contact size={18}/>{tr('Contacts','Contacts')}</button>
+            <button className={memberMode==='qr'?'active':''} onClick={()=>{setMemberMode('qr');setScannerError('');setScannerOn(true);}}><QrCode size={18}/>{tr('QR স্ক্যান','Scan QR')}</button>
+          </div>
+          {memberMode==='qr' && <div className="qr-scan-box"><video ref={videoRef} playsInline muted/><p>{tr('অন্য সদস্যের Happy Time Connect QR কোড ক্যামেরার সামনে ধরুন।','Point the camera at another member’s Happy Time Connect QR code.')}</p>{scannerError&&<div className="vault-error">{scannerError}</div>}</div>}
+          <label className="member-number-label">{tr('ফোন নম্বর','Phone number')}<input value={memberPhones} onChange={e=>setMemberPhones(e.target.value)} placeholder="+8801XXXXXXXXX" inputMode="tel"/></label>
+          <small>{tr('একাধিক নম্বর হলে কমা দিয়ে আলাদা করুন। সদস্যের অ্যাকাউন্ট আগে থেকে নিবন্ধিত থাকতে হবে।','Separate multiple numbers with commas. Each member must already have a registered account.')}</small>
+          <button className="feature-primary member-submit" disabled={!memberPhones.trim()||memberBusy} onClick={submitMemberAdd}>{memberBusy?tr('যোগ হচ্ছে...','Adding...'):tr('সদস্য যোগ করুন','Add member')}</button>
+        </div>
+      </div>}
+      {showMyQr && <div className="member-modal-backdrop" role="dialog" aria-modal="true"><div className="member-modal panel-card my-qr-card"><button className="icon-btn qr-close" onClick={()=>setShowMyQr(false)}><X size={20}/></button><h3>{tr('আমার QR কোড','My QR code')}</h3><p>{tr('অন্যরা এই কোড স্ক্যান করে আপনার নম্বর দিয়ে গ্রুপে যোগ করতে পারবে।','Others can scan this code to add you to a group.')}</p>{myQr?<img src={myQr} alt="My Happy Time Connect QR"/>:<p>{tr('QR তৈরি হচ্ছে...','Generating QR...')}</p>}<small>{myProfile?.phone||''}</small></div></div>}
+      <div className="my-qr-action"><button onClick={()=>setShowMyQr(true)}><QrCode size={16}/>{tr('আমার QR কোড দেখান','Show my QR code')}</button></div>
       {notice&&<div className="feature-notice">{notice}</div>}
     </>}
     {isCalls && <>
@@ -262,7 +348,7 @@ function MainApp({ lang, setLang }) {
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> {tr('আমার থিম সেভ করুন','Save my theme')}</button>
         </div>
       </section>}
-      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers}/>}
+      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers} myProfile={myProfile}/>}
       <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label))}</span></button>)}</nav>
