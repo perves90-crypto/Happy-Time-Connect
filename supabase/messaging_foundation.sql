@@ -107,9 +107,9 @@ grant execute on function public.htc_create_conversation(text,text,uuid[]) to au
 
 -- Private file bucket. Policies only allow a signed-in user to access their own user-id folder.
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values ('htc-private','htc-private',false,52428800,
+values ('htc-private','htc-private',false,53687091200,
   array['image/jpeg','image/png','image/webp','video/mp4','audio/mpeg','audio/mp4','audio/webm','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
-on conflict (id) do nothing;
+on conflict (id) do update set file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
 
 drop policy if exists "Users upload own HTC files" on storage.objects;
 create policy "Users upload own HTC files" on storage.objects
