@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault } from './lib/localVault';
 import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw } from 'lucide-react';
 
 const initialChats = [
@@ -24,6 +25,82 @@ const palettes = [
 ];
 const themes = Array.from({length:50},(_,i)=>({id:i,name:themeNames[i],colors:palettes[i%palettes.length],variant:i%5}));
 const colorChoices = Array.from({length:120},(_,i)=>`hsl(${Math.round(i*3)} 78% ${[42,50,58,66][Math.floor(i/30)]}%)`);
+
+
+function StoragePanel({ lang }) {
+  const tr = (bn, en) => lang === 'bn' ? bn : en;
+  const [category, setCategory] = useState('downloads');
+  const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const native = isNativeVault();
+  async function refresh() {
+    try { setFiles(await listLocalFiles()); }
+    catch (e) { setError(e.message || 'Storage could not be read'); }
+  }
+  useEffect(() => { refresh(); }, []);
+  async function handleFiles(event) {
+    const selected = Array.from(event.target.files || []);
+    if (!selected.length) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      for (const file of selected) await saveLocalFile(file, category);
+      await refresh();
+      setMessage(tr('ফাইল ফোনের লোকাল স্টোরেজে সেভ হয়েছে।','Files saved to local storage.'));
+    } catch (e) {
+      setError(e.message || tr('ফাইল সেভ করা যায়নি।','Could not save file.'));
+    } finally {
+      setBusy(false); event.target.value = '';
+    }
+  }
+  async function downloadFile(record) {
+    try {
+      const blob = await getLocalFileBlob(record);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = record.name; anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (e) { setError(e.message); }
+  }
+  async function removeFile(record) {
+    if (!window.confirm(tr('এই ফাইলটি ফোনের স্টোরেজ থেকে মুছে ফেলবেন?','Delete this file from local storage?'))) return;
+    try { await deleteLocalFile(record); await refresh(); }
+    catch (e) { setError(e.message); }
+  }
+  const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
+  const formatSize = (bytes) => bytes < 1024*1024 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1024/1024).toFixed(1)} MB`;
+  return <section className="storage-page">
+    <div className="storage-intro panel-card">
+      <div className="storage-drive-icon"><Smartphone size={29}/></div>
+      <div><h2>{tr('ফোনের নিজস্ব স্টোরেজ','On-device storage')}</h2>
+      <p>{native ? tr('ফাইল Android ফোনের Documents/Happy Time Connect ফোল্ডারে রাখা হবে।','Files are saved in Documents/Happy Time Connect on this Android device.') : tr('এটি এখন ব্রাউজারের লোকাল স্টোরেজে সেভ করছে। Android অ্যাপ ইনস্টল হলে নির্দিষ্ট ফোন ফোল্ডারে সেভ হবে।','Files are currently saved in browser-local storage. Install the Android app to save into the dedicated phone folder.')}</p></div>
+      <span className="local-only-badge"><span/> {tr('লোকাল সেভ','LOCAL SAVE')}</span>
+    </div>
+    <div className="storage-folders panel-card">
+      <div className="theme-section-head"><div><h2>{tr('আপনার ফোল্ডার সিস্টেম','Your folder system')}</h2><p>{tr('প্রতিটি ধরনের ফাইল আলাদা ফোল্ডারে থাকবে','Files are organized by type')}</p></div><span className="count-badge">7 FOLDERS</span></div>
+      <div className="vault-folder-grid">{VAULT_CATEGORIES.map((item, index) => {
+        const count = files.filter(file => file.category === item.id).length;
+        return <button key={item.id} className={category===item.id?'vault-folder selected':'vault-folder'} onClick={()=>setCategory(item.id)}>
+          <span className={`vault-folder-icon folder-tone-${index}`}><Folder size={21}/></span>
+          <span><b>{tr(item.bn,item.en)}</b><small>{count} {tr('টি ফাইল','files')}</small></span>
+        </button>;
+      })}</div>
+    </div>
+    <div className="storage-upload panel-card">
+      <div><h2>{tr('ফোনে ফাইল সেভ করুন','Save files to this device')}</h2><p>{tr('ফোল্ডার নির্বাচন করে ছবি, ভিডিও, ডকুমেন্ট বা অডিও যোগ করুন।','Choose a folder and add photos, videos, documents or audio.')}</p></div>
+      <label className="vault-category-select"><span>{tr('সেভ করার ফোল্ডার','Save to folder')}</span><select value={category} onChange={e=>setCategory(e.target.value)}>{VAULT_CATEGORIES.map(item=><option key={item.id} value={item.id}>{tr(item.bn,item.en)}</option>)}</select></label>
+      <label className="vault-upload-button"><Plus size={18}/>{busy?tr('সেভ হচ্ছে...','Saving...'):tr('ফোন থেকে ফাইল নির্বাচন করুন','Choose files from phone')}<input type="file" multiple onChange={handleFiles} disabled={busy}/></label>
+      {message&&<div className="vault-success">{message}</div>}{error&&<div className="vault-error">{error}</div>}
+    </div>
+    <div className="storage-files panel-card">
+      <div className="theme-section-head"><div><h2>{tr('সেভ করা ফাইল','Saved files')}</h2><p>{tr('এই ডিভাইসে সংরক্ষিত ফাইলের তালিকা','Files stored on this device')}</p></div><span className="count-badge">{files.length} FILES · {formatSize(totalBytes)}</span></div>
+      {files.length===0?<div className="vault-empty"><Folder size={30}/><b>{tr('এখনো কোনো ফাইল সেভ হয়নি','No files saved yet')}</b><span>{tr('প্রথম ফাইলটি যোগ করতে উপরের বাটনে চাপ দিন।','Use the button above to add your first file.')}</span></div>:
+      <div className="vault-file-list">{files.map(file=><div className="vault-file-row" key={file.id}><span className="vault-file-icon"><Folder size={18}/></span><span className="vault-file-info"><b>{file.name}</b><small>{tr(VAULT_CATEGORIES.find(c=>c.id===file.category)?.bn||'Downloads',VAULT_CATEGORIES.find(c=>c.id===file.category)?.en||'Downloads')} · {formatSize(file.size)} · {new Date(file.savedAt).toLocaleDateString()}</small></span><button onClick={()=>downloadFile(file)}>{tr('খুলুন','Open')}</button><button className="vault-delete" onClick={()=>removeFile(file)}>{tr('মুছুন','Delete')}</button></div>)}</div>}
+    </div>
+    <div className="vault-note"><ShieldCheck size={17}/><span>{tr('ফাইলের ক্লাউড স্টোরেজ ব্যবহার করা হচ্ছে না। চ্যাট ও অ্যাকাউন্ট চালাতে সার্ভার সংযোগ থাকবে। নতুন ইনকামিং চ্যাট অ্যাটাচমেন্টের অটো-সেভ পরবর্তী ধাপে যুক্ত হবে।','Cloud file storage is not used here. Server connectivity remains for accounts and messaging. Automatic saving of incoming chat attachments will be connected in the next step.')}</span></div>
+  </section>;
+}
 
 function MainApp({ lang, setLang }) {
   const tr = (bn, en) => lang === 'bn' ? bn : en;
@@ -68,7 +145,7 @@ function MainApp({ lang, setLang }) {
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> {tr('আমার থিম সেভ করুন','Save my theme')}</button>
         </div>
       </section>}
-      {active!=='chats'&&active!=='settings'&&<section className="single-panel panel-card"><div className="large-feature">{active==='groups'?<Users/>:active==='calls'?<Video/>:active==='storage'?<Folder/>:<LockKeyhole/>}</div><h2>{active==='groups'?tr('গ্রুপ চ্যাট','Group Chat'):active==='calls'?tr('অডিও ও ভিডিও কল','Audio & Video Calls'):active==='storage'?tr('আপনার ব্যক্তিগত স্টোরেজ','Your Personal Storage'):tr('কোড-সুরক্ষিত প্রাইভেট চ্যাট','Code-Protected Private Chat')}</h2><p>{active==='groups'?tr('কোম্পানির টিম ও প্রয়োজন অনুযায়ী গ্রুপ তৈরি করা যাবে।','Create groups for your teams and projects.'):active==='calls'?tr('গ্রুপ অডিও ও ভিডিও কলে ১০০ জন অংশগ্রহণের লক্ষ্য রাখা হয়েছে।','Group audio and video calls are planned for up to 100 participants.'):active==='storage'?tr('ক্লাউডে সংরক্ষিত ফাইল ফোনেও স্বয়ংক্রিয়ভাবে সেভ করার ব্যবস্থা থাকবে।','Cloud files are planned to sync to your phone storage.'):tr('প্রাইভেট চ্যাটে প্রবেশের জন্য অনুমোদিত অ্যাকাউন্ট ও গোপন কোড প্রয়োজন হবে।','Private chat will require an authorized account and a secret code.')}</p><div className="status-tag"><ShieldCheck size={16}/> {tr('প্রাথমিক ডিজাইন — সার্ভিস সংযোগের অপেক্ষায়','Initial design — awaiting service connection')}</div></section>}
+      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<section className="single-panel panel-card"><div className="large-feature">{active==='groups'?<Users/>:active==='calls'?<Video/>:<LockKeyhole/>}</div><h2>{active==='groups'?tr('গ্রুপ চ্যাট','Group Chat'):active==='calls'?tr('অডিও ও ভিডিও কল','Audio & Video Calls'):tr('কোড-সুরক্ষিত প্রাইভেট চ্যাট','Code-Protected Private Chat')}</h2><p>{active==='groups'?tr('কোম্পানির টিম ও প্রয়োজন অনুযায়ী গ্রুপ তৈরি করা যাবে।','Create groups for your teams and projects.'):active==='calls'?tr('গ্রুপ অডিও ও ভিডিও কলে ১০০ জন অংশগ্রহণের লক্ষ্য রাখা হয়েছে।','Group audio and video calls are planned for up to 100 participants.'):tr('প্রাইভেট চ্যাটে প্রবেশের জন্য অনুমোদিত অ্যাকাউন্ট ও গোপন কোড প্রয়োজন হবে।','Private chat will require an authorized account and a secret code.')}</p><div className="status-tag"><ShieldCheck size={16}/> {tr('প্রাথমিক ডিজাইন — সার্ভিস সংযোগের অপেক্ষায়','Initial design — awaiting service connection')}</div></section>}
       <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label)}</span></button>)}</nav>
