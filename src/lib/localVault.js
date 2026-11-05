@@ -37,6 +37,49 @@ async function dbAction(mode, action) {
   });
 }
 const safeName = (name) => name.normalize('NFKC').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-100) || 'file';
+
+function inferMediaCategory(file) {
+  const type = file?.type || '';
+  const name = file?.name || '';
+  if (type.startsWith('image/')) return 'photos';
+  if (type.startsWith('video/')) return 'videos';
+  if (type.startsWith('audio/')) return 'audio';
+  if (/\\.(pdf|docx?|xlsx?|pptx?|txt|rtf|odt|ods)$/i.test(name)) return 'documents';
+  return 'downloads';
+}
+
+/** Save a downloaded conversation attachment locally. */
+export async function saveDownloadedAttachment(blob, details = {}) {
+  if (!blob) throw new Error('ডাউনলোড করা ফাইল পাওয়া যায়নি।');
+  const name = details.fileName || blob.name || 'download';
+  const file = new File([blob], name, { type: blob.type || details.mimeType || 'application/octet-stream' });
+  const mediaCategory = inferMediaCategory(file);
+  const chatType = details.chatType === 'group' ? 'group' : details.chatType === 'personal' ? 'personal' : null;
+  const category = chatType || mediaCategory;
+  const mediaFolder = mediaCategory === 'photos' ? 'Photos'
+    : mediaCategory === 'videos' ? 'Videos'
+    : mediaCategory === 'audio' ? 'Audio & Voice'
+    : mediaCategory === 'documents' ? 'Documents' : 'Downloads';
+  return saveLocalFile(file, category, {
+    ...details,
+    source: 'chat-download',
+    folderPath: chatType ? `${chatType === 'group' ? 'Group Chat' : 'Personal Chat'}/${mediaFolder}` : mediaFolder,
+  });
+}
+
+/** Chat screens dispatch this event when the user downloads an attachment. */
+export function listenForChatDownloads(onSaved, onError = () => {}) {
+  const handler = async (event) => {
+    try {
+      const record = await saveDownloadedAttachment(event.detail?.blob, event.detail || {});
+      onSaved(record);
+    } catch (error) {
+      onError(error);
+    }
+  };
+  window.addEventListener('htc:download-attachment', handler);
+  return () => window.removeEventListener('htc:download-attachment', handler);
+}
 const toBase64 = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
@@ -52,7 +95,11 @@ export async function saveLocalFile(file, category = 'downloads', details = {}) 
   let storagePath = '';
   let storageType = 'browser';
   if (Capacitor.isNativePlatform()) {
-    const folder = categoryInfo.id;
+    const folder = details.folderPath || ({
+      personal: 'Personal Chat', groups: 'Group Chat', photos: 'Photos',
+      videos: 'Videos', documents: 'Documents', audio: 'Audio & Voice',
+      downloads: 'Downloads',
+    }[categoryInfo.id] || 'Downloads');
     storagePath = `${ROOT}/${folder}/${Date.now()}_${filename}`;
     await Filesystem.writeFile({
       path: storagePath,
