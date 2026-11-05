@@ -99,7 +99,7 @@ function App() {
 
   async function requestCode(e) {
     e.preventDefault(); setError(''); setNotice('');
-    if (!/^\\+[1-9]\\d{7,14}$/.test(phone.trim())) {
+    if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
       setError('দেশের কোডসহ নম্বর লিখুন। উদাহরণ: +8801XXXXXXXXX'); return;
     }
     if (!supabase) { setError('Supabase সংযোগ পাওয়া যায়নি।'); return; }
