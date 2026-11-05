@@ -34,13 +34,26 @@ alter table public.htc_conversations enable row level security;
 alter table public.htc_conversation_members enable row level security;
 alter table public.htc_messages enable row level security;
 
+-- SECURITY DEFINER helper avoids recursive RLS evaluation on the membership table.
+create or replace function public.htc_is_conversation_member(p_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+  select exists (
+    select 1 from public.htc_conversation_members
+    where conversation_id = p_conversation_id and user_id = auth.uid()
+  );
+$;
+revoke all on function public.htc_is_conversation_member(uuid) from public;
+grant execute on function public.htc_is_conversation_member(uuid) to authenticated;
+
 drop policy if exists "htc conversations visible to members" on public.htc_conversations;
 create policy "htc conversations visible to members"
 on public.htc_conversations for select to authenticated
-using (exists (
-  select 1 from public.htc_conversation_members m
-  where m.conversation_id = id and m.user_id = auth.uid()
-));
+using (public.htc_is_conversation_member(id));
 
 drop policy if exists "htc users create conversations" on public.htc_conversations;
 create policy "htc users create conversations"
@@ -50,11 +63,7 @@ with check (created_by = auth.uid());
 drop policy if exists "htc members visible to conversation members" on public.htc_conversation_members;
 create policy "htc members visible to conversation members"
 on public.htc_conversation_members for select to authenticated
-using (user_id = auth.uid() or exists (
-  select 1 from public.htc_conversation_members mine
-  where mine.conversation_id = htc_conversation_members.conversation_id
-    and mine.user_id = auth.uid()
-));
+using (user_id = auth.uid() or public.htc_is_conversation_member(conversation_id));
 
 drop policy if exists "htc users add themselves as owner" on public.htc_conversation_members;
 create policy "htc users add themselves as owner"
@@ -71,22 +80,14 @@ with check (
 drop policy if exists "htc messages visible to members" on public.htc_messages;
 create policy "htc messages visible to members"
 on public.htc_messages for select to authenticated
-using (exists (
-  select 1 from public.htc_conversation_members m
-  where m.conversation_id = htc_messages.conversation_id
-    and m.user_id = auth.uid()
-));
+using (public.htc_is_conversation_member(conversation_id));
 
 drop policy if exists "htc members send messages" on public.htc_messages;
 create policy "htc members send messages"
 on public.htc_messages for insert to authenticated
 with check (
   sender_id = auth.uid()
-  and exists (
-    select 1 from public.htc_conversation_members m
-    where m.conversation_id = htc_messages.conversation_id
-      and m.user_id = auth.uid()
-  )
+  and public.htc_is_conversation_member(conversation_id)
 );
 
 -- Add another registered user to a conversation only when called by its owner/admin.
