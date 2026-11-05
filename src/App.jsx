@@ -78,11 +78,19 @@ function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
+  const [pin, setPin] = useState('');
+  const [mode, setMode] = useState('signup');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+
+  const normalizePhone = (value) => {
+    const cleaned = value.trim().replace(/[\\s()-]/g, '');
+    if (!/^\\+[1-9]\\d{7,14}$/.test(cleaned)) return null;
+    return cleaned;
+  };
+
+  const loginEmail = (normalizedPhone) =>
+    normalizedPhone.replace(/\\D/g, '') + '@phone.happytimeconnect.invalid';
 
   useEffect(() => {
     if (!supabase) { setChecking(false); return; }
@@ -97,49 +105,59 @@ function App() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  async function requestCode(e) {
-    e.preventDefault(); setError(''); setNotice('');
-    if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
-      setError('দেশের কোডসহ নম্বর লিখুন। উদাহরণ: +8801XXXXXXXXX'); return;
+  async function handleAuth(e) {
+    e.preventDefault();
+    setError('');
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+      setError('দেশের কোডসহ সঠিক নম্বর লিখুন। উদাহরণ: +8801XXXXXXXXX');
+      return;
     }
-    if (!supabase) { setError('Supabase সংযোগ পাওয়া যায়নি।'); return; }
+    if (!/^\\d{8,12}$/.test(pin)) {
+      setError('নিরাপত্তার জন্য ৮ থেকে ১২ সংখ্যার PIN দিন।');
+      return;
+    }
+    if (!supabase) {
+      setError('Supabase সংযোগ পাওয়া যায়নি।');
+      return;
+    }
     setBusy(true);
-    const { error: err } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
+    const email = loginEmail(normalizedPhone);
+    const result = mode === 'signup'
+      ? await supabase.auth.signUp({
+          email,
+          password: pin,
+          options: { data: { phone: normalizedPhone, display_name: normalizedPhone } }
+        })
+      : await supabase.auth.signInWithPassword({ email, password: pin });
     setBusy(false);
-    if (err) setError(err.message);
-    else { setSent(true); setNotice('OTP অনুরোধ পাঠানো হয়েছে। SMS Provider সক্রিয় না থাকলে SMS আসবে না।'); }
-  }
-
-  async function confirmCode(e) {
-    e.preventDefault(); setError(''); setNotice('');
-    setBusy(true);
-    const { error: err } = await supabase.auth.verifyOtp({
-      phone: phone.trim(), token: code.trim(), type: 'sms'
-    });
-    setBusy(false);
-    if (err) setError(err.message);
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+    if (mode === 'signup' && !result.data.session) {
+      setError('অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু Email confirmation চালু আছে। Supabase-এ Confirm email বন্ধ করতে হবে।');
+    }
   }
 
   if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
-  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={sent ? confirmCode : requestCode}>
+  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}>
     <div className="auth-mark"><MessageCircle size={28}/></div>
     <p className="eyebrow">T.K FOOD PRODUCTS DISTRIBUTION LIMITED</p>
     <h1>Happy Time Connect</h1>
-    <p>মোবাইল নম্বর দিয়ে নিরাপদে প্রবেশ করুন।</p>
+    <p>মোবাইল নম্বর ও গোপন PIN দিয়ে প্রবেশ করুন।</p>
     {!isSupabaseConfigured && <div className="auth-error">Supabase URL ও Publishable Key সেট করা নেই।</div>}
-    {!sent ? <>
-      <label>মোবাইল নম্বর (দেশের কোডসহ)</label>
-      <input className="auth-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+8801XXXXXXXXX" autoComplete="tel"/>
-      <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':'OTP পাঠান'}</button>
-    </> : <>
-      <label>SMS-এ পাওয়া OTP</label>
-      <input className="auth-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="OTP কোড" inputMode="numeric" autoComplete="one-time-code"/>
-      <button className="auth-submit" disabled={busy || code.trim().length < 4}>{busy?'যাচাই হচ্ছে...':'OTP যাচাই করে প্রবেশ করুন'}</button>
-      <button type="button" className="auth-back" onClick={()=>{setSent(false);setCode('');setError('');}}>নম্বর পরিবর্তন করুন</button>
-    </>}
+    <div className="auth-mode-switch">
+      <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');}}>নতুন অ্যাকাউন্ট</button>
+      <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');}}>আগের অ্যাকাউন্ট</button>
+    </div>
+    <label>মোবাইল নম্বর (দেশের কোডসহ)</label>
+    <input className="auth-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+8801XXXXXXXXX" autoComplete="tel" inputMode="tel"/>
+    <label>গোপন PIN (৮–১২ সংখ্যা)</label>
+    <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value)} placeholder="৮–১২ সংখ্যার PIN" type="password" inputMode="numeric" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={12}/>
+    <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'অ্যাকাউন্ট তৈরি করুন':'লগইন করুন'}</button>
     {error && <div className="auth-error">{error}</div>}
-    {notice && <div className="auth-notice">{notice}</div>}
-    <small>সফলভাবে প্রবেশ করলে এই ডিভাইসে সেশন সংরক্ষিত থাকবে।</small>
+    <small>এই পদ্ধতিতে SMS পাঠানো হয় না। একই ফোনে লগইন সেশন সংরক্ষিত থাকবে। PIN কাউকে জানাবেন না।</small>
   </form></div>;
   return <MainApp/>;
 }
