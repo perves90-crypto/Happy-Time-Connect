@@ -25,3 +25,12 @@ body{background:radial-gradient(ellipse at 78% 8%,color-mix(in srgb,var(--user-a
 
 /* Phone + PIN account mode selector */
 .auth-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:5px;border-radius:13px;background:#071b24}.auth-mode-switch button{padding:10px 8px;border:1px solid transparent;border-radius:10px;background:transparent;color:#a9c5c8;font:inherit;cursor:pointer}.auth-mode-switch button.active{background:#174b4c;color:#dffff5;border-color:#38e0b255;box-shadow:inset 0 1px 0 #ffffff16}
+
+/* Updated signup screen: country calling code + local mobile number */
+.phone-entry{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(115px,1fr);gap:8px}
+.country-select{width:100%;min-width:0;padding:13px 10px;border-radius:13px;border:1px solid rgba(255,255,255,.16);background:#091e28;color:#fff;outline:none;font:inherit;font-size:13px}
+.country-select:focus{border-color:#38e0b2}
+.country-select option{background:#091e28;color:#fff}
+.phone-number-input{min-width:0}
+.auth-card .auth-mode-switch button{font-size:14px}
+@media(max-width:420px){.auth-card{padding:23px 18px}.phone-entry{grid-template-columns:minmax(0,1.1fr) minmax(100px,.9fr)}.country-select{font-size:11px;padding:12px 7px}}
