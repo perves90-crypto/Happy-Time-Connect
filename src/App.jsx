@@ -92,12 +92,31 @@ function App() {
   const [country, setCountry] = useState('BD');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [newRecoveryCode, setNewRecoveryCode] = useState('');
   const [mode, setMode] = useState('signup');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const selectedCountry = countryOptions.find(item=>item.iso===country) || countryOptions.find(item=>item.iso==='BD');
-  const loginEmail = (fullPhone) => fullPhone.replace(/\\D/g, '') + '@phone.happytimeconnect.invalid';
+  const loginEmail = (fullPhone) => fullPhone.replace(/\D/g, '') + '@phone.happytimeconnect.invalid';
+  const normalizedPhone = () => {
+    const digits = phone.replace(/\D/g, '');
+    if ((country === 'BD' && !/^\d{11}$/.test(digits)) || (country !== 'BD' && !/^\d{7,15}$/.test(digits))) return null;
+    const local = country === 'BD' ? digits.replace(/^0/, '') : digits;
+    return '+' + selectedCountry.dial.replace(/\D/g, '') + local;
+  };
+  const makeRecoveryCode = () => {
+    const bytes = new Uint8Array(60);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, value => String(value % 10)).join('');
+  };
+  const hashCode = async (value) => {
+    const bytes = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), b=>b.toString(16).padStart(2,'0')).join('');
+  };
 
   useEffect(() => {
     if (!supabase) { setChecking(false); return; }
@@ -115,58 +134,105 @@ function App() {
   async function handleAuth(e) {
     e.preventDefault();
     setError('');
-    const digits = phone.replace(/\\D/g, '');
-    const isBangladesh = country === 'BD';
-    if ((isBangladesh && !/^\\d{11}$/.test(digits)) || (!isBangladesh && !/^\\d{7,15}$/.test(digits))) {
-      setError(isBangladesh ? 'বাংলাদেশের ১১ সংখ্যার মোবাইল নম্বর লিখুন।' : 'নির্বাচিত দেশের সঠিক মোবাইল নম্বর লিখুন।');
+    setNotice('');
+    const fullPhone = normalizedPhone();
+    if (!fullPhone) {
+      setError(country === 'BD' ? 'বাংলাদেশের ১১ সংখ্যার মোবাইল নম্বর লিখুন।' : 'নির্বাচিত দেশের সঠিক মোবাইল নম্বর লিখুন।');
       return;
     }
+    if (!supabase) { setError('Supabase সংযোগ পাওয়া যায়নি।'); return; }
+
+    if (mode === 'forgot') {
+      if (!/^\d{60}$/.test(recoveryCode)) { setError('আপনার ৬০ সংখ্যার Recovery Code লিখুন।'); return; }
+      if (!/^[A-Za-z0-9]{6}$/.test(pin)) { setError('নতুন পাসওয়ার্ড ঠিক ৬ অক্ষরের হতে হবে।'); return; }
+      setBusy(true);
+      const recoveryHash = await hashCode(recoveryCode);
+      const { data, error: rpcError } = await supabase.rpc('reset_password_with_recovery_code', {
+        p_phone: fullPhone,
+        p_recovery_hash: recoveryHash,
+        p_new_password: pin
+      });
+      setBusy(false);
+      if (rpcError) { setError(rpcError.message); return; }
+      if (data !== true) { setError('মোবাইল নম্বর অথবা Recovery Code সঠিক নয়।'); return; }
+      setNotice('নতুন পাসওয়ার্ড সেট হয়েছে। এখন লগইন করুন।');
+      setMode('login');
+      setPin('');
+      setRecoveryCode('');
+      return;
+    }
+
     if (!/^[A-Za-z0-9]{6}$/.test(pin)) {
       setError('পাসওয়ার্ড ঠিক ৬ অক্ষরের হতে হবে। ইংরেজি অক্ষর ও সংখ্যা ব্যবহার করতে পারবেন।');
       return;
     }
-    if (!supabase) {
-      setError('Supabase সংযোগ পাওয়া যায়নি।');
-      return;
-    }
     setBusy(true);
-    const localNumber = country === 'BD' ? digits.replace(/^0/, '') : digits;\n    const fullPhone = '+' + selectedCountry.dial.replace(/[^0-9]/g,'') + localNumber;
     const email = loginEmail(fullPhone);
-    const result = mode === 'signup'
-      ? await supabase.auth.signUp({ email, password: pin, options: { data: { phone: fullPhone, display_name: fullPhone } } })
-      : await supabase.auth.signInWithPassword({ email, password: pin });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error.message);
-      return;
+    let result;
+    let generatedCode = '';
+    if (mode === 'signup') {
+      generatedCode = makeRecoveryCode();
+      const recoveryHash = await hashCode(generatedCode);
+      result = await supabase.auth.signUp({
+        email,
+        password: pin,
+        options: { data: { phone: fullPhone, display_name: fullPhone, recovery_code_hash: recoveryHash } }
+      });
+    } else {
+      result = await supabase.auth.signInWithPassword({ email, password: pin });
     }
+    setBusy(false);
+    if (result.error) { setError(result.error.message); return; }
     if (mode === 'signup' && !result.data.session) {
       setError('অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু Supabase-এ Confirm email বন্ধ করতে হবে।');
+      return;
     }
+    if (mode === 'signup') setNewRecoveryCode(generatedCode);
+  }
+
+  async function copyRecoveryCode() {
+    try { await navigator.clipboard.writeText(newRecoveryCode); setNotice('Recovery Code কপি হয়েছে। নিরাপদ জায়গায় লিখে রাখুন।'); }
+    catch { setNotice('কোডটি হাতে লিখে নিরাপদ জায়গায় সংরক্ষণ করুন।'); }
   }
 
   if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
+  if (newRecoveryCode) return <div className="auth-screen"><section className="auth-card recovery-card">
+    <div className="auth-mark"><ShieldCheck size={28}/></div><h1>আপনার Recovery Code</h1>
+    <p>এই ৬০ সংখ্যার কোডটি এখনই কপি করে কাগজে লিখে নিরাপদ জায়গায় রাখুন। পাসওয়ার্ড ভুলে গেলে এই কোড দিয়ে নতুন পাসওয়ার্ড সেট করতে পারবেন।</p>
+    <div className="recovery-code-box" dir="ltr">{newRecoveryCode}</div>
+    <button type="button" className="auth-submit" onClick={copyRecoveryCode}>কোড কপি করুন</button>
+    {notice && <div className="auth-notice">{notice}</div>}
+    <button type="button" className="auth-submit" onClick={()=>{setNewRecoveryCode('');setNotice('');}}>কোড সংরক্ষণ করেছি — চালিয়ে যান</button>
+    <small>এই কোড আর পরে দেখানো হবে না। কাউকে দেবেন না। ফোন হারালে কোডটি আলাদা নিরাপদ জায়গায় রাখুন।</small>
+  </section></div>;
   if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}>
     <div className="auth-mark"><MessageCircle size={28}/></div>
     <h1>Happy Time Connect</h1>
     <p>মোবাইল নম্বর ও ৬ অক্ষরের পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন বা প্রবেশ করুন।</p>
     {!isSupabaseConfigured && <div className="auth-error">Supabase URL ও Publishable Key সেট করা নেই।</div>}
     <div className="auth-mode-switch">
-      <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');}}>সাইন আপ</button>
-      <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');}}>লগইন</button>
+      <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');setNotice('');}}>সাইন আপ</button>
+      <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');setNotice('');}}>লগইন</button>
     </div>
     <label>দেশ নির্বাচন ও মোবাইল নম্বর</label>
     <div className="phone-entry">
-      <select className="country-select" value={country} onChange={e=>{setCountry(e.target.value);setPhone('');}}>
+      <select className="country-select" value={country} onChange={e=>{setCountry(e.target.value);setPhone('');}} aria-label="দেশের কোড নির্বাচন">
         {countryOptions.map(item=><option key={item.iso} value={item.iso}>{item.name} (+{item.dial})</option>)}
       </select>
-      <input className="auth-input phone-number-input" value={phone} onChange={e=>setPhone(e.target.value.replace(/\\D/g,'').slice(0,country==='BD'?11:15))} placeholder={country==='BD'?'01XXXXXXXXX':'মোবাইল নম্বর'} autoComplete="tel-national" inputMode="numeric"/>
+      <input className="auth-input phone-number-input" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,'').slice(0,country==='BD'?11:15))} placeholder={country==='BD'?'01XXXXXXXXX':'মোবাইল নম্বর'} autoComplete="tel-national" inputMode="numeric"/>
     </div>
-    <label>৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)</label>
+    {mode==='forgot' && <>
+      <label>৬০ সংখ্যার Recovery Code</label>
+      <input className="auth-input" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value.replace(/\D/g,'').slice(0,60))} placeholder="৬০ সংখ্যার কোড" inputMode="numeric" maxLength={60}/>
+    </>}
+    <label>{mode==='forgot'?'নতুন ৬ অক্ষরের পাসওয়ার্ড':'৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)'}</label>
     <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder="৬ অক্ষরের পাসওয়ার্ড" type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
-    <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'সাইন আপ':'লগইন'}</button>
+    {mode==='login' && <button type="button" className="forgot-link" onClick={()=>{setMode('forgot');setPin('');setError('');setNotice('');}}>পাসওয়ার্ড ভুলে গেছেন? Forgot Password</button>}
+    <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'সাইন আপ':mode==='forgot'?'নতুন পাসওয়ার্ড সেট করুন':'লগইন'}</button>
+    {mode==='forgot' && <button type="button" className="auth-back" onClick={()=>{setMode('login');setError('');}}>লগইনে ফিরে যান</button>}
+    {notice && <div className="auth-notice">{notice}</div>}
     {error && <div className="auth-error">{error}</div>}
-    <small>SMS/OTP প্রয়োজন নেই। প্রথমবার সাইন আপের পর একই নম্বর ও পাসওয়ার্ড দিয়ে লগইন করতে পারবেন।</small>
+    <small>SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৬০ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।</small>
   </form></div>;
   return <MainApp/>;
 }
