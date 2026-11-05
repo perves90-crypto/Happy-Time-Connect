@@ -8,6 +8,7 @@ on:
       - 'src/**'
       - 'package.json'
       - 'capacitor.config.ts'
+      - 'capacitor.config.json'
       - '.github/workflows/android-apk.yml'
 
 jobs:
@@ -27,6 +28,8 @@ jobs:
           java-version: '21'
       - name: Install dependencies
         run: npm install
+      - name: Verify Capacitor config
+        run: test -f capacitor.config.json && cat capacitor.config.json
       - name: Build web app
         run: npm run build
       - name: Generate Android project
