@@ -97,3 +97,14 @@ export function subscribeToMessages(conversationId, onMessage) {
     }, payload => onMessage(payload.new))
     .subscribe();
 }
+
+
+export async function addConversationMember(conversationId, userId) {
+  const { data, error } = await supabase.rpc('htc_add_conversation_member', {
+    p_conversation_id: conversationId,
+    p_user_id: userId,
+    p_role: 'member'
+  });
+  if (error) throw error;
+  return data;
+}
