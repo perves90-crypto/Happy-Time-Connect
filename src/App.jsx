@@ -130,7 +130,7 @@ function App() {
       return;
     }
     setBusy(true);
-    const fullPhone = '+' + selectedCountry.dial.replace(/[^0-9]/g,'') + digits;
+    const localNumber = country === 'BD' ? digits.replace(/^0/, '') : digits;\n    const fullPhone = '+' + selectedCountry.dial.replace(/[^0-9]/g,'') + localNumber;
     const email = loginEmail(fullPhone);
     const result = mode === 'signup'
       ? await supabase.auth.signUp({ email, password: pin, options: { data: { phone: fullPhone, display_name: fullPhone } } })
