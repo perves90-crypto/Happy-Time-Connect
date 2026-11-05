@@ -121,7 +121,7 @@ function MainApp({ lang, setLang }) {
     <aside className={`sidebar ${mobileMenu?'show':''}`}><div className="language-switch app-language"><button onClick={()=>setLang('bn')} className={lang==='bn'?'active':''}>বাংলা</button><button onClick={()=>setLang('en')} className={lang==='en'?'active':''}>English</button></div>
       <div className="brand"><div className="brand-mark"><MessageCircle size={23}/></div><div><strong>Happy Time</strong><span>CONNECT</span></div></div>
       <div className="profile-card"><div className="avatar user">HT</div><div><b>{tr('স্বাগতম','Welcome')}</b><small>{tr('আপনার অ্যাকাউন্ট','Your account')}</small></div><span className="online-dot"/></div>
-      <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'})[label] || label))}</span></button>)}</nav>
+      <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'})[label] || label)}</span></button>)}</nav>
       <div className="sidebar-bottom"><ShieldCheck size={17}/><span>{tr('নিরাপদ যোগাযোগ','Secure communication')}</span><button aria-label="Settings" onClick={()=>setActive('settings')}><Settings size={17}/></button></div>
     </aside>
     <main className="main-panel">
