@@ -11,11 +11,11 @@ begin
   insert into public.profiles (id, phone, display_name)
   values (
     new.id,
-    new.phone,
+    coalesce(new.phone, new.raw_user_meta_data ->> 'phone'),
     coalesce(new.raw_user_meta_data ->> 'display_name', '')
   )
   on conflict (id) do update
-    set phone = excluded.phone,
+    set phone = coalesce(excluded.phone, public.profiles.phone),
         updated_at = now();
 
   return new;
