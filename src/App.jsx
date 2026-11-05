@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { getMyProfile, findUserByPhone, listMyConversations, createConversation, fetchMessages, sendMessage, subscribeToMessages } from './lib/chatService';
 import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault, listenForChatDownloads } from './lib/localVault';
 import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw } from 'lucide-react';
 
@@ -149,12 +150,57 @@ function MainApp({ lang, setLang }) {
   const [active,setActive] = useState('chats');
   const [query,setQuery] = useState('');
   const [message,setMessage] = useState('');
+  const [myProfile,setMyProfile] = useState(null);
+  const [conversations,setConversations] = useState([]);
+  const [selectedConversation,setSelectedConversation] = useState(null);
+  const [chatMessages,setChatMessages] = useState([]);
+  const [chatBusy,setChatBusy] = useState(false);
+  const [chatError,setChatError] = useState('');
   const [mobileMenu,setMobileMenu] = useState(false);
   const [selectedTheme,setSelectedTheme] = useState(()=>Number(localStorage.getItem('htc-theme')||0));
   const [custom,setCustom] = useState(()=>JSON.parse(localStorage.getItem('htc-custom')||'null') || {background:'#071a24',surface:'#173b46',accent:'#38e0b2'});
   const [useCustom,setUseCustom] = useState(()=>localStorage.getItem('htc-use-custom')==='true');
   const title = ({chats:tr('চ্যাট','Chats'),groups:tr('গ্রুপ','Groups'),calls:tr('কল','Calls'),storage:tr('স্টোরেজ','Storage'),private:tr('প্রাইভেট','Private'),settings:tr('থিম ও সেটিংস','Themes & Settings')})[active] || tr('চ্যাট','Chats');
-  const filtered = initialChats.filter(c=>(c.name+c.message).toLowerCase().includes(query.toLowerCase()));
+  const filtered = conversations.filter(c => {
+    const other = c.members?.find(m => m.user_id !== myProfile?.id);
+    const label = c.kind === 'group' ? (c.title || 'Group') : (other?.user_id || 'Private chat');
+    return (label + (c.lastMessage?.body || '')).toLowerCase().includes(query.toLowerCase());
+  });
+  async function refreshConversations() {
+    const [profile, rows] = await Promise.all([getMyProfile(), listMyConversations()]);
+    setMyProfile(profile); setConversations(rows);
+    setSelectedConversation(current => current && rows.some(row => row.id === current.id) ? rows.find(row => row.id === current.id) : (rows[0] || null));
+  }
+  useEffect(() => { let alive = true; refreshConversations().catch(error => { if (alive) setChatError(error.message || 'Chat service is not ready.'); }); return () => { alive = false; }; }, []);
+  useEffect(() => {
+    if (!selectedConversation) { setChatMessages([]); return; }
+    let alive = true;
+    fetchMessages(selectedConversation.id).then(rows => { if (alive) setChatMessages(rows); }).catch(error => { if (alive) setChatError(error.message); });
+    const channel = subscribeToMessages(selectedConversation.id, row => {
+      setChatMessages(current => current.some(item => item.id === row.id) ? current : [...current,row]);
+      setConversations(current => current.map(c => c.id === row.conversation_id ? {...c,lastMessage:row} : c));
+    });
+    return () => { alive = false; supabase.removeChannel(channel); };
+  }, [selectedConversation?.id]);
+  async function startPrivateChat() {
+    const phone = window.prompt(tr('যার সাথে চ্যাট করবেন তার সম্পূর্ণ ফোন নম্বর লিখুন (+880...)','Enter the full phone number (+880...)'));
+    if (!phone) return;
+    setChatBusy(true); setChatError('');
+    try {
+      const person = await findUserByPhone(phone.trim());
+      if (!person) throw new Error(tr('এই নম্বরে কোনো নিবন্ধিত ব্যবহারকারী পাওয়া যায়নি।','No registered user found with this phone number.'));
+      const existing = conversations.find(c => c.kind === 'private' && c.members?.some(m => m.user_id === person.user_id));
+      if (existing) setSelectedConversation(existing);
+      else { const conversation = await createConversation({kind:'private',memberIds:[person.user_id]}); await refreshConversations(); setSelectedConversation(conversation); }
+    } catch (error) { setChatError(error.message || 'Could not start chat.'); }
+    finally { setChatBusy(false); }
+  }
+  async function submitMessage(event) {
+    event.preventDefault(); if (!selectedConversation || !message.trim()) return;
+    const body=message.trim(); setMessage(''); setChatError('');
+    try { const row=await sendMessage(selectedConversation.id,body); setChatMessages(current=>current.some(item=>item.id===row.id)?current:[...current,row]); setConversations(current=>current.map(c=>c.id===row.conversation_id?{...c,lastMessage:row}:c)); }
+    catch(error) { setMessage(body); setChatError(error.message||'Message could not be sent.'); }
+  }
   const theme = themes[selectedTheme] || themes[0];
   const vars = useMemo(()=>useCustom?{'--user-bg':custom.background,'--user-surface':custom.surface,'--user-accent':custom.accent}:{'--user-bg':theme.colors[0],'--user-surface':theme.colors[1],'--user-accent':theme.colors[2]},[useCustom,custom,theme]);
   useEffect(()=>{localStorage.setItem('htc-theme',String(selectedTheme));localStorage.setItem('htc-custom',JSON.stringify(custom));localStorage.setItem('htc-use-custom',String(useCustom));},[selectedTheme,custom,useCustom]);
@@ -173,11 +219,16 @@ function MainApp({ lang, setLang }) {
     <main className="main-panel">
       <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">{tr('আপনার যোগাযোগের জায়গা','Your communication space')}</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
       {active==='chats'&&<section className="content-grid">
-        <div className="chat-list panel-card"><div className="section-heading"><div><h2>{tr('আপনার কথোপকথন','Your conversations')}</h2><p>{tr('ব্যক্তিগত ও গ্রুপ মেসেজ','Personal and group messages')}</p></div><button className="primary-icon" aria-label="New chat"><Plus size={19}/></button></div>
+        <div className="chat-list panel-card"><div className="section-heading"><div><h2>{tr('আপনার কথোপকথন','Your conversations')}</h2><p>{tr('ব্যক্তিগত ও গ্রুপ মেসেজ','Personal and group messages')}</p></div><button className="primary-icon" aria-label="New chat" onClick={startPrivateChat} disabled={chatBusy}><Plus size={19}/></button></div>
           <label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={tr('চ্যাট খুঁজুন','Search chats')}/></label>
-          {filtered.map(chat=><button className="chat-row" key={chat.name} onClick={()=>setMessage('')}><div className={`avatar ${chat.color}`}>{chat.group?<Users size={21}/>:chat.name.slice(0,1)}</div><div className="chat-meta"><b>{chat.name}</b><span>{chat.message}</span></div><div className="chat-side"><small>{chat.time}</small>{chat.unread>0&&<i>{chat.unread}</i>}</div></button>)}
-          <div className="empty-note">{tr('এটি প্রাথমিক ইন্টারফেস। চ্যাট সার্ভার যুক্ত হলে এখানে বাস্তব মেসেজ আসবে।','This is the initial interface. Real messages will appear here after the chat service is connected.')}</div></div>
-        <div className="conversation panel-card"><div className="conversation-head"><div className="avatar mint"><Users size={21}/></div><div><b>{tr('কথোপকথন নির্বাচন করুন','Select a conversation')}</b><small>{tr('আপনার মেসেজিং স্পেস','Your messaging space')}</small></div></div><div className="welcome"><div className="welcome-icon"><MessageCircle size={34}/></div><h2>{tr('একসাথে থাকুন, সংযুক্ত থাকুন','Stay together, stay connected')}</h2><p>{tr('ব্যক্তিগত চ্যাট, গ্রুপ, অডিও-ভিডিও কল এবং ফাইল শেয়ারিং—সব এক জায়গায়।','Personal chats, groups, audio/video calls and file sharing — all in one place.')}</p><div className="feature-pills"><span><Cloud size={14}/> Cloud Storage</span><span><Smartphone size={14}/> Phone Storage</span><span><LockKeyhole size={14}/> Private Chat</span></div></div><form className="message-compose" onSubmit={e=>{e.preventDefault();setMessage('')}}><button type="button" className="icon-btn"><Paperclip size={19}/></button><input value={message} onChange={e=>setMessage(e.target.value)} placeholder="মেসেজ লিখুন (চ্যাট সংযোগের পর চালু হবে)" disabled/><button type="button" className="icon-btn"><Mic size={19}/></button><button className="send-btn" disabled><Send size={17}/></button></form></div>
+          {filtered.map(chat=>{const other=chat.members?.find(m=>m.user_id!==myProfile?.id);const label=chat.kind==='group'?(chat.title||'Group'):(other?.user_id||tr('ব্যক্তিগত চ্যাট','Private chat'));return <button className={selectedConversation?.id===chat.id?'chat-row selected':'chat-row'} key={chat.id} onClick={()=>setSelectedConversation(chat)}><div className="avatar mint">{chat.kind==='group'?<Users size={21}/>:label.slice(0,1)}</div><div className="chat-meta"><b>{label}</b><span>{chat.lastMessage?.body||tr('এখনো কোনো মেসেজ নেই','No messages yet')}</span></div><div className="chat-side"><small>{chat.lastMessage?new Date(chat.lastMessage.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</small></div></button>})}
+          {!filtered.length&&<div className="empty-note">{chatBusy?tr('লোড হচ্ছে...','Loading...'):tr('এখনো কোনো কথোপকথন নেই। + চাপ দিয়ে ফোন নম্বর দিয়ে নতুন চ্যাট শুরু করুন।','No conversations yet. Tap + to start a chat using a phone number.')}</div>}
+        </div>
+        <div className="conversation panel-card"><div className="conversation-head"><div className="avatar mint">{selectedConversation?.kind==='group'?<Users size={21}/>:<MessageCircle size={21}/>}</div><div><b>{selectedConversation?.kind==='group'?(selectedConversation.title||'Group'):selectedConversation?tr('ব্যক্তিগত চ্যাট','Private chat'):tr('কথোপকথন নির্বাচন করুন','Select a conversation')}</b><small>{selectedConversation?tr('সংযুক্ত কথোপকথন','Connected conversation'):tr('আপনার মেসেজিং স্পেস','Your messaging space')}</small></div></div>
+          {selectedConversation?<div className="message-history">{chatMessages.map(row=><div key={row.id} className={row.sender_id===myProfile?.id?'message-bubble mine':'message-bubble'}><p>{row.body}</p><small>{new Date(row.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div>)}</div>:<div className="welcome"><div className="welcome-icon"><MessageCircle size={34}/></div><h2>{tr('একসাথে থাকুন, সংযুক্ত থাকুন','Stay together, stay connected')}</h2><p>{tr('নতুন চ্যাট শুরু করতে বাম পাশের + বাটনে চাপ দিন।','Tap + on the left to start a new chat.')}</p><div className="feature-pills"><span><Smartphone size={14}/> Phone Storage</span><span><LockKeyhole size={14}/> Private Chat</span></div></div>}
+          {chatError&&<div className="feature-notice">{chatError}</div>}
+          <form className="message-compose" onSubmit={submitMessage}><button type="button" className="icon-btn" disabled><Paperclip size={19}/></button><input value={message} onChange={e=>setMessage(e.target.value)} placeholder={tr('মেসেজ লিখুন...','Write a message...')} disabled={!selectedConversation||chatBusy}/><button type="button" className="icon-btn" disabled><Mic size={19}/></button><button className="send-btn" disabled={!selectedConversation||!message.trim()||chatBusy}><Send size={17}/></button></form>
+        </div>
       </section>}
       {active==='settings'&&<section className="theme-settings">
         <div className="theme-intro panel-card"><div className="theme-intro-icon"><Palette size={28}/></div><div><h2>{tr('আপনার অ্যাপ, আপনার পছন্দের রং','Your app, your colors')}</h2><p>{tr('৫০টি ভিজ্যুয়াল থিম এবং ১২০টি কালার থেকে বেছে নিন। চাইলে নিজের মতো করে রং সেট করুন।','Choose from 50 visual themes and 120+ colors, or customize your own.')}</p></div></div>
