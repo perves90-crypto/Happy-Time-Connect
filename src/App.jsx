@@ -108,9 +108,9 @@ function App() {
     return '+' + selectedCountry.dial.replace(/\D/g, '') + local;
   };
   const makeRecoveryCode = () => {
-    const bytes = new Uint8Array(60);
+    const bytes = new Uint8Array(4);
     crypto.getRandomValues(bytes);
-    return Array.from(bytes, value => String(value % 10)).join('');
+    return String((((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0) % 10000).padStart(4, '0');
   };
   const hashCode = async (value) => {
     const bytes = new TextEncoder().encode(value);
@@ -143,7 +143,7 @@ function App() {
     if (!supabase) { setError('Supabase সংযোগ পাওয়া যায়নি।'); return; }
 
     if (mode === 'forgot') {
-      if (!/^\d{60}$/.test(recoveryCode)) { setError('আপনার ৬০ সংখ্যার Recovery Code লিখুন।'); return; }
+      if (!/^\d{4}$/.test(recoveryCode)) { setError('আপনার ৪ সংখ্যার Recovery Code লিখুন।'); return; }
       if (!/^[A-Za-z0-9]{6}$/.test(pin)) { setError('নতুন পাসওয়ার্ড ঠিক ৬ অক্ষরের হতে হবে।'); return; }
       setBusy(true);
       const recoveryHash = await hashCode(recoveryCode);
@@ -198,7 +198,7 @@ function App() {
   if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
   if (newRecoveryCode) return <div className="auth-screen"><section className="auth-card recovery-card">
     <div className="auth-mark"><ShieldCheck size={28}/></div><h1>আপনার Recovery Code</h1>
-    <p>এই ৬০ সংখ্যার কোডটি এখনই কপি করে কাগজে লিখে নিরাপদ জায়গায় রাখুন। পাসওয়ার্ড ভুলে গেলে এই কোড দিয়ে নতুন পাসওয়ার্ড সেট করতে পারবেন।</p>
+    <p>এই ৪ সংখ্যার কোডটি এখনই কপি করে কাগজে লিখে নিরাপদ জায়গায় রাখুন। পাসওয়ার্ড ভুলে গেলে এই কোড দিয়ে নতুন পাসওয়ার্ড সেট করতে পারবেন।</p>
     <div className="recovery-code-box" dir="ltr">{newRecoveryCode}</div>
     <button type="button" className="auth-submit" onClick={copyRecoveryCode}>কোড কপি করুন</button>
     {notice && <div className="auth-notice">{notice}</div>}
@@ -222,8 +222,8 @@ function App() {
       <input className="auth-input phone-number-input" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,'').slice(0,country==='BD'?11:15))} placeholder={country==='BD'?'01XXXXXXXXX':'মোবাইল নম্বর'} autoComplete="tel-national" inputMode="numeric"/>
     </div>
     {mode==='forgot' && <>
-      <label>৬০ সংখ্যার Recovery Code</label>
-      <input className="auth-input" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value.replace(/\D/g,'').slice(0,60))} placeholder="৬০ সংখ্যার কোড" inputMode="numeric" maxLength={60}/>
+      <label>৪ সংখ্যার Recovery Code</label>
+      <input className="auth-input" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="৪ সংখ্যার কোড" inputMode="numeric" maxLength={4}/>
     </>}
     <label>{mode==='forgot'?'নতুন ৬ অক্ষরের পাসওয়ার্ড':'৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)'}</label>
     <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder="৬ অক্ষরের পাসওয়ার্ড" type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
@@ -232,7 +232,7 @@ function App() {
     {mode==='forgot' && <button type="button" className="auth-back" onClick={()=>{setMode('login');setError('');}}>লগইনে ফিরে যান</button>}
     {notice && <div className="auth-notice">{notice}</div>}
     {error && <div className="auth-error">{error}</div>}
-    <small>SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৬০ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।</small>
+    <small>SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৪ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।</small>
   </form></div>;
   return <MainApp/>;
 }
