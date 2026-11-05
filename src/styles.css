@@ -34,3 +34,13 @@ body{background:radial-gradient(ellipse at 78% 8%,color-mix(in srgb,var(--user-a
 .phone-number-input{min-width:0}
 .auth-card .auth-mode-switch button{font-size:14px}
 @media(max-width:420px){.auth-card{padding:23px 18px}.phone-entry{grid-template-columns:minmax(0,1.1fr) minmax(100px,.9fr)}.country-select{font-size:11px;padding:12px 7px}}
+
+/* Compact country calling-code selector and recovery-code flow */
+.phone-entry{grid-template-columns:112px minmax(0,1fr);gap:8px}
+.country-select{width:112px;min-width:112px;padding:13px 7px;font-size:12px}
+.phone-number-input{min-width:0}
+.forgot-link{align-self:flex-end;border:0;background:transparent;color:#7de6cb;font:inherit;font-size:12px;padding:2px 0;cursor:pointer}
+.forgot-link:hover{text-decoration:underline}
+.recovery-card{gap:16px}
+.recovery-code-box{padding:18px 13px;border:1px dashed #38e0b2;border-radius:14px;background:#061b24;color:#7ff0d2;font-family:monospace;font-size:clamp(13px,3.5vw,19px);line-height:1.8;letter-spacing:1.5px;overflow-wrap:anywhere;text-align:center;user-select:all}
+@media(max-width:420px){.phone-entry{grid-template-columns:105px minmax(0,1fr)}.country-select{width:105px;min-width:105px;font-size:11px;padding:12px 5px}}
