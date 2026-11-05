@@ -102,6 +102,48 @@ function StoragePanel({ lang }) {
   </section>;
 }
 
+
+function FeatureWorkspace({ active, lang }) {
+  const tr = (bn,en) => lang === 'bn' ? bn : en;
+  const [groups,setGroups] = useState([
+    {name:'পরিবার',members:8,desc:'পরিবারের সবার সাথে যোগাযোগ',tone:'mint'},
+    {name:'বন্ধুমহল',members:12,desc:'বন্ধুদের আড্ডা ও খবর',tone:'blue'},
+    {name:'কাজের টিম',members:6,desc:'কাজের আপডেট ও আলোচনা',tone:'orange'},
+  ]);
+  const [groupName,setGroupName] = useState('');
+  const [showCreate,setShowCreate] = useState(false);
+  const [notice,setNotice] = useState('');
+  const [secret,setSecret] = useState('');
+  const [unlocked,setUnlocked] = useState(false);
+  const [search,setSearch] = useState('');
+  const isGroups = active === 'groups';
+  const isCalls = active === 'calls';
+  const title = isGroups ? tr('আপনার গ্রুপসমূহ','Your Groups') : isCalls ? tr('কল ও মিটিং','Calls & Meetings') : tr('প্রাইভেট চ্যাট','Private Chat');
+  const subtitle = isGroups ? tr('পরিবার, বন্ধু ও কাজের দলের জন্য আলাদা জায়গা','A space for family, friends and teams') : isCalls ? tr('অডিও ও ভিডিও যোগাযোগের কেন্দ্র','Your audio and video communication hub') : tr('গোপন কোড দিয়ে সুরক্ষিত ব্যক্তিগত জায়গা','A protected space with a secret code');
+  return <section className="feature-workspace">
+    <div className="feature-hero panel-card">
+      <div className="feature-hero-copy"><span className="feature-kicker">HAPPY TIME CONNECT</span><h2>{title}</h2><p>{subtitle}</p></div>
+      <div className="feature-hero-art">{isGroups?<Users size={54}/>:isCalls?<Video size={54}/>:<LockKeyhole size={54}/>}</div>
+    </div>
+    {isGroups && <>
+      <div className="feature-toolbar"><div><h3>{tr('গ্রুপ তালিকা','Group list')}</h3><p>{tr('আপনার তৈরি করা গ্রুপগুলো','Groups you create')}</p></div><button className="feature-primary" onClick={()=>setShowCreate(v=>!v)}><Plus size={17}/>{tr('নতুন গ্রুপ','New group')}</button></div>
+      {showCreate && <form className="feature-create panel-card" onSubmit={e=>{e.preventDefault();if(!groupName.trim())return;setGroups(v=>[{name:groupName.trim(),members:1,desc:tr('নতুন গ্রুপ · সদস্য যোগ করা বাকি','New group · invite members next'),tone:'mint'},...v]);setGroupName('');setShowCreate(false);setNotice(tr('গ্রুপের ইন্টারফেস তৈরি হয়েছে। সদস্য যোগ ও সার্ভার সংযোগ পরের ধাপ।','Group interface created. Member invites and server connection are the next step.'));}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><button className="feature-primary" type="submit">{tr('তৈরি করুন','Create')}</button></form>}
+      <div className="feature-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr('গ্রুপ খুঁজুন','Search groups')}/></div>
+      <div className="feature-card-grid">{groups.filter(g=>g.name.toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.name}><div className={'feature-item-icon '+g.tone}><Users size={23}/></div><div className="feature-item-title"><h3>{g.name}</h3><span>{g.members} {tr('জন সদস্য','members')}</span></div><p>{g.desc}</p><button onClick={()=>setNotice(tr('এই গ্রুপের মেসেজিং চালু করতে সার্ভার ও সদস্য সংযোগ প্রয়োজন।','Connect the messaging service and members to open this group.'))}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button></article>)}</div>
+      {notice&&<div className="feature-notice">{notice}</div>}
+    </>}
+    {isCalls && <>
+      <div className="call-action-grid"><button className="call-action audio" onClick={()=>setNotice(tr('অডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Audio call interface is ready. A calling service connection is required to place calls.'))}><span><Phone size={25}/></span><b>{tr('অডিও কল','Audio call')}</b><small>{tr('শুধু কথা বলুন','Voice only')}</small></button><button className="call-action video" onClick={()=>setNotice(tr('ভিডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Video call interface is ready. A calling service connection is required to place calls.'))}><span><Video size={25}/></span><b>{tr('ভিডিও কল','Video call')}</b><small>{tr('সামনাসামনি কথা বলুন','Face to face')}</small></button><button className="call-action group-call" onClick={()=>setNotice(tr('গ্রুপ কলের ইন্টারফেস প্রস্তুত। একাধিক অংশগ্রহণকারীর জন্য কল সার্ভিস প্রয়োজন।','Group call interface is ready. A calling service is required for multiple participants.'))}><span><Users size={25}/></span><b>{tr('গ্রুপ কল','Group call')}</b><small>{tr('একসাথে কথা বলুন','Talk together')}</small></button></div>
+      <div className="feature-toolbar"><div><h3>{tr('সাম্প্রতিক কল','Recent calls')}</h3><p>{tr('আপনার কল হিস্ট্রি এখানে দেখা যাবে','Your call history will appear here')}</p></div></div>
+      <div className="call-empty panel-card"><div className="feature-item-icon blue"><Phone size={24}/></div><b>{tr('এখনো কোনো কল নেই','No calls yet')}</b><span>{tr('কল চালু হলে তারিখ, সময় ও কলের ধরন এখানে জমা হবে।','Call date, time and type will be listed here when calling is connected.')}</span></div>
+      {notice&&<div className="feature-notice">{notice}</div>}
+    </>}
+    {!isGroups&&!isCalls && <>
+      <div className="private-layout"><div className="private-info panel-card"><div className="private-lock"><LockKeyhole size={34}/></div><h3>{tr('আপনার ব্যক্তিগত নিরাপদ জায়গা','Your private space')}</h3><p>{tr('প্রাইভেট চ্যাটের জন্য আলাদা গোপন কোডের ইন্টারফেস। আসল মেসেজ ও এনক্রিপশন চালুর আগে সার্ভার সুরক্ষা যুক্ত করতে হবে।','A separate secret-code interface for private chat. Server-side protection and encryption must be connected before real messages are enabled.')}</p><div className="private-badges"><span><ShieldCheck size={14}/> {tr('কোড প্রবেশ','Code access')}</span><span><LockKeyhole size={14}/> {tr('ব্যক্তিগত','Private')}</span></div></div><form className="private-unlock panel-card" onSubmit={e=>{e.preventDefault();setUnlocked(false);setNotice(tr('ইন্টারফেস প্রস্তুত, তবে নিরাপদ যাচাই সার্ভার এখনো সংযুক্ত নয়।','Interface is ready, but secure server verification is not connected yet.'));}}><span className="feature-kicker">PRIVATE ACCESS</span><h3>{tr('গোপন কোড দিন','Enter secret code')}</h3><p>{tr('আপনার প্রাইভেট চ্যাটে প্রবেশের কোড','Your private chat access code')}</p><input value={secret} onChange={e=>setSecret(e.target.value.slice(0,12))} type="password" placeholder={tr('গোপন কোড','Secret code')} maxLength={12}/><button className="feature-primary" disabled={!secret.trim()} type="submit"><LockKeyhole size={16}/>{tr('প্রবেশ করুন','Unlock')}</button>{notice&&<div className="feature-notice">{notice}</div>}</form></div>
+    </>}
+  </section>;
+}
+
 function MainApp({ lang, setLang }) {
   const tr = (bn, en) => lang === 'bn' ? bn : en;
   const [active,setActive] = useState('chats');
@@ -145,7 +187,7 @@ function MainApp({ lang, setLang }) {
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> {tr('আমার থিম সেভ করুন','Save my theme')}</button>
         </div>
       </section>}
-      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<section className="single-panel panel-card"><div className="large-feature">{active==='groups'?<Users/>:active==='calls'?<Video/>:<LockKeyhole/>}</div><h2>{active==='groups'?tr('গ্রুপ চ্যাট','Group Chat'):active==='calls'?tr('অডিও ও ভিডিও কল','Audio & Video Calls'):tr('কোড-সুরক্ষিত প্রাইভেট চ্যাট','Code-Protected Private Chat')}</h2><p>{active==='groups'?tr('কোম্পানির টিম ও প্রয়োজন অনুযায়ী গ্রুপ তৈরি করা যাবে।','Create groups for your teams and projects.'):active==='calls'?tr('গ্রুপ অডিও ও ভিডিও কলে ১০০ জন অংশগ্রহণের লক্ষ্য রাখা হয়েছে।','Group audio and video calls are planned for up to 100 participants.'):tr('প্রাইভেট চ্যাটে প্রবেশের জন্য অনুমোদিত অ্যাকাউন্ট ও গোপন কোড প্রয়োজন হবে।','Private chat will require an authorized account and a secret code.')}</p><div className="status-tag"><ShieldCheck size={16}/> {tr('প্রাথমিক ডিজাইন — সার্ভিস সংযোগের অপেক্ষায়','Initial design — awaiting service connection')}</div></section>}
+      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang}/>}
       <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label))}</span></button>)}</nav>
