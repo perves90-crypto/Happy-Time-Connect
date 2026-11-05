@@ -1,0 +1,8 @@
+const config = {
+  appId: 'com.happytime.connect',
+  appName: 'Happy Time Connect',
+  webDir: 'dist',
+  bundledWebRuntime: false,
+};
+
+export default config;
