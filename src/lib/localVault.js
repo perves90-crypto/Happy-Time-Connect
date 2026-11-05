@@ -44,7 +44,7 @@ function inferMediaCategory(file) {
   if (type.startsWith('image/')) return 'photos';
   if (type.startsWith('video/')) return 'videos';
   if (type.startsWith('audio/')) return 'audio';
-  if (/\\.(pdf|docx?|xlsx?|pptx?|txt|rtf|odt|ods)$/i.test(name)) return 'documents';
+  if (/\.(pdf|docx?|xlsx?|pptx?|txt|rtf|odt|ods)$/i.test(name)) return 'documents';
   return 'downloads';
 }
 
@@ -55,7 +55,7 @@ export async function saveDownloadedAttachment(blob, details = {}) {
   const file = new File([blob], name, { type: blob.type || details.mimeType || 'application/octet-stream' });
   const mediaCategory = inferMediaCategory(file);
   const chatType = details.chatType === 'group' ? 'group' : details.chatType === 'personal' ? 'personal' : null;
-  const category = chatType || mediaCategory;
+  const category = chatType === 'group' ? 'groups' : chatType === 'personal' ? 'personal' : mediaCategory;
   const mediaFolder = mediaCategory === 'photos' ? 'Photos'
     : mediaCategory === 'videos' ? 'Videos'
     : mediaCategory === 'audio' ? 'Audio & Voice'
