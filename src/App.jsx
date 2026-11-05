@@ -25,7 +25,8 @@ const palettes = [
 const themes = Array.from({length:50},(_,i)=>({id:i,name:themeNames[i],colors:palettes[i%palettes.length],variant:i%5}));
 const colorChoices = Array.from({length:120},(_,i)=>`hsl(${Math.round(i*3)} 78% ${[42,50,58,66][Math.floor(i/30)]}%)`);
 
-function MainApp({ lang, setLang }) {\n  const tr = (bn, en) => lang === 'bn' ? bn : en;
+function MainApp({ lang, setLang }) {
+  const tr = (bn, en) => lang === 'bn' ? bn : en;
   const [active,setActive] = useState('chats');
   const [query,setQuery] = useState('');
   const [message,setMessage] = useState('');
@@ -33,7 +34,7 @@ function MainApp({ lang, setLang }) {\n  const tr = (bn, en) => lang === 'bn' ? 
   const [selectedTheme,setSelectedTheme] = useState(()=>Number(localStorage.getItem('htc-theme')||0));
   const [custom,setCustom] = useState(()=>JSON.parse(localStorage.getItem('htc-custom')||'null') || {background:'#071a24',surface:'#173b46',accent:'#38e0b2'});
   const [useCustom,setUseCustom] = useState(()=>localStorage.getItem('htc-use-custom')==='true');
-  const title = tabs.find(t=>t.id===active)?.label || 'চ্যাট';
+  const title = ({chats:tr('চ্যাট','Chats'),groups:tr('গ্রুপ','Groups'),calls:tr('কল','Calls'),storage:tr('স্টোরেজ','Storage'),private:tr('প্রাইভেট','Private'),settings:tr('থিম ও সেটিংস','Themes & Settings')})[active] || tr('চ্যাট','Chats');
   const filtered = initialChats.filter(c=>(c.name+c.message).toLowerCase().includes(query.toLowerCase()));
   const theme = themes[selectedTheme] || themes[0];
   const vars = useMemo(()=>useCustom?{'--user-bg':custom.background,'--user-surface':custom.surface,'--user-accent':custom.accent}:{'--user-bg':theme.colors[0],'--user-surface':theme.colors[1],'--user-accent':theme.colors[2]},[useCustom,custom,theme]);
@@ -42,33 +43,33 @@ function MainApp({ lang, setLang }) {\n  const tr = (bn, en) => lang === 'bn' ? 
   return <div className="app-shell" style={vars}>
     <aside className={`sidebar ${mobileMenu?'show':''}`}><div className="language-switch app-language"><button onClick={()=>setLang('bn')} className={lang==='bn'?'active':''}>বাংলা</button><button onClick={()=>setLang('en')} className={lang==='en'?'active':''}>English</button></div>
       <div className="brand"><div className="brand-mark"><MessageCircle size={23}/></div><div><strong>Happy Time</strong><span>CONNECT</span></div></div>
-      <div className="profile-card"><div className="avatar user">HT</div><div><b>স্বাগতম</b><small>আপনার অ্যাকাউন্ট</small></div><span className="online-dot"/></div>
-      <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{label}</span></button>)}</nav>
-      <div className="sidebar-bottom"><ShieldCheck size={17}/><span>নিরাপদ যোগাযোগ</span><button aria-label="Settings" onClick={()=>setActive('settings')}><Settings size={17}/></button></div>
+      <div className="profile-card"><div className="avatar user">HT</div><div><b>{tr('স্বাগতম','Welcome')}</b><small>{tr('আপনার অ্যাকাউন্ট','Your account')}</small></div><span className="online-dot"/></div>
+      <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'})[label] || label)}</span></button>)}</nav>
+      <div className="sidebar-bottom"><ShieldCheck size={17}/><span>{tr('নিরাপদ যোগাযোগ','Secure communication')}</span><button aria-label="Settings" onClick={()=>setActive('settings')}><Settings size={17}/></button></div>
     </aside>
     <main className="main-panel">
-      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">আপনার যোগাযোগের জায়গা</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
+      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">{tr('আপনার যোগাযোগের জায়গা','Your communication space')}</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
       {active==='chats'&&<section className="content-grid">
-        <div className="chat-list panel-card"><div className="section-heading"><div><h2>আপনার কথোপকথন</h2><p>ব্যক্তিগত ও গ্রুপ মেসেজ</p></div><button className="primary-icon" aria-label="New chat"><Plus size={19}/></button></div>
-          <label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="চ্যাট খুঁজুন"/></label>
+        <div className="chat-list panel-card"><div className="section-heading"><div><h2>{tr('আপনার কথোপকথন','Your conversations')}</h2><p>{tr('ব্যক্তিগত ও গ্রুপ মেসেজ','Personal and group messages')}</p></div><button className="primary-icon" aria-label="New chat"><Plus size={19}/></button></div>
+          <label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={tr('চ্যাট খুঁজুন','Search chats')}/></label>
           {filtered.map(chat=><button className="chat-row" key={chat.name} onClick={()=>setMessage('')}><div className={`avatar ${chat.color}`}>{chat.group?<Users size={21}/>:chat.name.slice(0,1)}</div><div className="chat-meta"><b>{chat.name}</b><span>{chat.message}</span></div><div className="chat-side"><small>{chat.time}</small>{chat.unread>0&&<i>{chat.unread}</i>}</div></button>)}
-          <div className="empty-note">এটি প্রাথমিক ইন্টারফেস। চ্যাট সার্ভার যুক্ত হলে এখানে বাস্তব মেসেজ আসবে।</div></div>
-        <div className="conversation panel-card"><div className="conversation-head"><div className="avatar mint"><Users size={21}/></div><div><b>কথোপকথন নির্বাচন করুন</b><small>আপনার মেসেজিং স্পেস</small></div></div><div className="welcome"><div className="welcome-icon"><MessageCircle size={34}/></div><h2>একসাথে থাকুন, সংযুক্ত থাকুন</h2><p>ব্যক্তিগত চ্যাট, গ্রুপ, অডিও-ভিডিও কল এবং ফাইল শেয়ারিং—সব এক জায়গায়।</p><div className="feature-pills"><span><Cloud size={14}/> Cloud Storage</span><span><Smartphone size={14}/> Phone Storage</span><span><LockKeyhole size={14}/> Private Chat</span></div></div><form className="message-compose" onSubmit={e=>{e.preventDefault();setMessage('')}}><button type="button" className="icon-btn"><Paperclip size={19}/></button><input value={message} onChange={e=>setMessage(e.target.value)} placeholder="মেসেজ লিখুন (চ্যাট সংযোগের পর চালু হবে)" disabled/><button type="button" className="icon-btn"><Mic size={19}/></button><button className="send-btn" disabled><Send size={17}/></button></form></div>
+          <div className="empty-note">{tr('এটি প্রাথমিক ইন্টারফেস। চ্যাট সার্ভার যুক্ত হলে এখানে বাস্তব মেসেজ আসবে।','This is the initial interface. Real messages will appear here after the chat service is connected.')}</div></div>
+        <div className="conversation panel-card"><div className="conversation-head"><div className="avatar mint"><Users size={21}/></div><div><b>{tr('কথোপকথন নির্বাচন করুন','Select a conversation')}</b><small>{tr('আপনার মেসেজিং স্পেস','Your messaging space')}</small></div></div><div className="welcome"><div className="welcome-icon"><MessageCircle size={34}/></div><h2>{tr('একসাথে থাকুন, সংযুক্ত থাকুন','Stay together, stay connected')}</h2><p>{tr('ব্যক্তিগত চ্যাট, গ্রুপ, অডিও-ভিডিও কল এবং ফাইল শেয়ারিং—সব এক জায়গায়।','Personal chats, groups, audio/video calls and file sharing — all in one place.')}</p><div className="feature-pills"><span><Cloud size={14}/> Cloud Storage</span><span><Smartphone size={14}/> Phone Storage</span><span><LockKeyhole size={14}/> Private Chat</span></div></div><form className="message-compose" onSubmit={e=>{e.preventDefault();setMessage('')}}><button type="button" className="icon-btn"><Paperclip size={19}/></button><input value={message} onChange={e=>setMessage(e.target.value)} placeholder="মেসেজ লিখুন (চ্যাট সংযোগের পর চালু হবে)" disabled/><button type="button" className="icon-btn"><Mic size={19}/></button><button className="send-btn" disabled><Send size={17}/></button></form></div>
       </section>}
       {active==='settings'&&<section className="theme-settings">
-        <div className="theme-intro panel-card"><div className="theme-intro-icon"><Palette size={28}/></div><div><h2>আপনার অ্যাপ, আপনার পছন্দের রং</h2><p>৫০টি ভিজ্যুয়াল থিম এবং ১২০টি কালার থেকে বেছে নিন। চাইলে নিজের মতো করে রং সেট করুন।</p></div></div>
-        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>থিম গ্যালারি · ৫০টি</h2><p>প্রতিটি থিমে আলাদা ব্যাকগ্রাউন্ড ও রঙের সমন্বয়</p></div><span className="count-badge">50 THEMES</span></div>
+        <div className="theme-intro panel-card"><div className="theme-intro-icon"><Palette size={28}/></div><div><h2>{tr('আপনার অ্যাপ, আপনার পছন্দের রং','Your app, your colors')}</h2><p>{tr('৫০টি ভিজ্যুয়াল থিম এবং ১২০টি কালার থেকে বেছে নিন। চাইলে নিজের মতো করে রং সেট করুন।','Choose from 50 visual themes and 120+ colors, or customize your own.')}</p></div></div>
+        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>{tr('থিম গ্যালারি · ৫০টি','Theme Gallery · 50')}</h2><p>{tr('প্রতিটি থিমে আলাদা ব্যাকগ্রাউন্ড ও রঙের সমন্বয়','Each theme has a unique background and color combination')}</p></div><span className="count-badge">50 THEMES</span></div>
           <div className="theme-grid">{themes.map(t=><button key={t.id} className={`theme-tile ${!useCustom&&selectedTheme===t.id?'chosen':''}`} onClick={()=>{setSelectedTheme(t.id);setUseCustom(false)}}><span className={`theme-art art-${t.variant}`} style={{'--t1':t.colors[0],'--t2':t.colors[1],'--t3':t.colors[2]}}><i/><i/><i/></span><span className="theme-tile-name">{t.name}</span>{!useCustom&&selectedTheme===t.id&&<span className="theme-check"><Check size={13}/></span>}</button>)}</div>
         </div>
-        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>কালার লাইব্রেরি · ১২০+ রং</h2><p>এক ক্লিকে Accent Color পরিবর্তন করুন</p></div><span className="count-badge">120+ COLORS</span></div><div className="color-grid">{colorChoices.map((color,i)=><button key={i} title={color} aria-label={`রং ${i+1}`} className={custom.accent===color?'color-dot active-color':''} style={{background:color}} onClick={()=>{setCustom(v=>({...v,accent:color}));setUseCustom(true)}}/>)}</div></div>
-        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>ম্যানুয়াল কালার কাস্টমাইজার</h2><p>নিজের পছন্দমতো Background, Card ও Accent Color ঠিক করুন</p></div><button className="reset-theme" onClick={()=>{setCustom({background:'#071a24',surface:'#173b46',accent:'#38e0b2'});setUseCustom(true)}}><RotateCcw size={14}/> Reset</button></div>
+        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>{tr('কালার লাইব্রেরি · ১২০+ রং','Color Library · 120+ colors')}</h2><p>{tr('এক ক্লিকে Accent Color পরিবর্তন করুন','Change the accent color with one click')}</p></div><span className="count-badge">120+ COLORS</span></div><div className="color-grid">{colorChoices.map((color,i)=><button key={i} title={color} aria-label={`রং ${i+1}`} className={custom.accent===color?'color-dot active-color':''} style={{background:color}} onClick={()=>{setCustom(v=>({...v,accent:color}));setUseCustom(true)}}/>)}</div></div>
+        <div className="theme-section panel-card"><div className="theme-section-head"><div><h2>{tr('ম্যানুয়াল কালার কাস্টমাইজার','Manual Color Customizer')}</h2><p>{tr('নিজের পছন্দমতো Background, Card ও Accent Color ঠিক করুন','Set your preferred background, card and accent colors')}</p></div><button className="reset-theme" onClick={()=>{setCustom({background:'#071a24',surface:'#173b46',accent:'#38e0b2'});setUseCustom(true)}}><RotateCcw size={14}/> Reset</button></div>
           <div className="manual-colors">{[['background','Background Color'],['surface','Card / Panel Color'],['accent','Accent / Button Color']].map(([key,label])=><label className="manual-color" key={key}><span>{label}</span><input type="color" value={custom[key]} onChange={e=>{setCustom(v=>({...v,[key]:e.target.value}));setUseCustom(true)}}/><code>{custom[key]}</code></label>)}</div>
-          <div className="theme-preview"><div className="preview-bubble">এটি আপনার থিমের নমুনা</div><button className="preview-button">Preview Button</button></div>
+          <div className="theme-preview"><div className="preview-bubble">এটি আপনার থিমের নমুনা</div><button className="preview-button">{tr('নমুনা বাটন','Preview Button')}</button></div>
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> আমার থিম সেভ করুন</button>
         </div>
       </section>}
-      {active!=='chats'&&active!=='settings'&&<section className="single-panel panel-card"><div className="large-feature">{active==='groups'?<Users/>:active==='calls'?<Video/>:active==='storage'?<Folder/>:<LockKeyhole/>}</div><h2>{active==='groups'?'গ্রুপ চ্যাট':active==='calls'?'অডিও ও ভিডিও কল':active==='storage'?'আপনার ব্যক্তিগত স্টোরেজ':'কোড-সুরক্ষিত প্রাইভেট চ্যাট'}</h2><p>{active==='groups'?'কোম্পানির টিম ও প্রয়োজন অনুযায়ী গ্রুপ তৈরি করা যাবে।':active==='calls'?'গ্রুপ অডিও ও ভিডিও কলে ১০০ জন অংশগ্রহণের লক্ষ্য রাখা হয়েছে।':active==='storage'?'ক্লাউডে সংরক্ষিত ফাইল ফোনেও স্বয়ংক্রিয়ভাবে সেভ করার ব্যবস্থা থাকবে।':'প্রাইভেট চ্যাটে প্রবেশের জন্য অনুমোদিত অ্যাকাউন্ট ও গোপন কোড প্রয়োজন হবে।'}</p><div className="status-tag"><ShieldCheck size={16}/> প্রাথমিক ডিজাইন — সার্ভিস সংযোগের অপেক্ষায়</div></section>}
-      <footer className="footer-note">Happy Time Connect <span>•</span> প্রাথমিক সংস্করণ 0.2</footer>
+      {active!=='chats'&&active!=='settings'&&<section className="single-panel panel-card"><div className="large-feature">{active==='groups'?<Users/>:active==='calls'?<Video/>:active==='storage'?<Folder/>:<LockKeyhole/>}</div><h2>{active==='groups'?tr('গ্রুপ চ্যাট','Group Chat'):active==='calls'?tr('অডিও ও ভিডিও কল','Audio & Video Calls'):active==='storage'?tr('আপনার ব্যক্তিগত স্টোরেজ','Your Personal Storage'):tr('কোড-সুরক্ষিত প্রাইভেট চ্যাট','Code-Protected Private Chat')}</h2><p>{active==='groups'?'কোম্পানির টিম ও প্রয়োজন অনুযায়ী গ্রুপ তৈরি করা যাবে।':active==='calls'?'গ্রুপ অডিও ও ভিডিও কলে ১০০ জন অংশগ্রহণের লক্ষ্য রাখা হয়েছে।':active==='storage'?'ক্লাউডে সংরক্ষিত ফাইল ফোনেও স্বয়ংক্রিয়ভাবে সেভ করার ব্যবস্থা থাকবে।':'প্রাইভেট চ্যাটে প্রবেশের জন্য অনুমোদিত অ্যাকাউন্ট ও গোপন কোড প্রয়োজন হবে।'}</p><div className="status-tag"><ShieldCheck size={16}/> {tr('প্রাথমিক ডিজাইন — সার্ভিস সংযোগের অপেক্ষায়','Initial design — awaiting service connection')}</div></section>}
+      <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{label}</span></button>)}</nav>
   </div>;
@@ -86,7 +87,10 @@ const countryDialCodes = [
 const countryNames = new Intl.DisplayNames(['bn'], { type: 'region' });
 const countryOptions = countryDialCodes.map(([iso, dial]) => ({iso,dial,name:countryNames.of(iso)})).sort((a,b)=>a.name.localeCompare(b.name,'bn'));
 
-function App() {\n  const [lang,setLang] = useState(() => localStorage.getItem('htc-language') || 'bn');\n  const tr = (bn,en) => lang === 'bn' ? bn : en;\n  useEffect(() => { localStorage.setItem('htc-language',lang); }, [lang]);
+function App() {
+  const [lang,setLang] = useState(() => localStorage.getItem('htc-language') || 'bn');
+  const tr = (bn,en) => lang === 'bn' ? bn : en;
+  useEffect(() => { localStorage.setItem('htc-language',lang); }, [lang]);
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [country, setCountry] = useState('BD');
@@ -197,24 +201,24 @@ function App() {\n  const [lang,setLang] = useState(() => localStorage.getItem('
 
   if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
   if (newRecoveryCode) return <div className="auth-screen"><section className="auth-card recovery-card">
-    <div className="auth-mark"><ShieldCheck size={28}/></div><h1>আপনার Recovery Code</h1>
-    <p>এই ৪ সংখ্যার কোডটি এখনই কপি করে কাগজে লিখে নিরাপদ জায়গায় রাখুন। পাসওয়ার্ড ভুলে গেলে এই কোড দিয়ে নতুন পাসওয়ার্ড সেট করতে পারবেন।</p>
+    <div className="auth-mark"><ShieldCheck size={28}/></div><h1>{tr('আপনার Recovery Code','Your Recovery Code')}</h1>
+    <p>{tr('এই ৪ সংখ্যার কোডটি এখনই কপি করে কাগজে লিখে নিরাপদ জায়গায় রাখুন। পাসওয়ার্ড ভুলে গেলে এই কোড দিয়ে নতুন পাসওয়ার্ড সেট করতে পারবেন।','Copy this 4-digit code and keep it somewhere safe. If you forget your password, you can use this code to set a new one.')}</p>
     <div className="recovery-code-box" dir="ltr">{newRecoveryCode}</div>
-    <button type="button" className="auth-submit" onClick={copyRecoveryCode}>কোড কপি করুন</button>
+    <button type="button" className="auth-submit" onClick={copyRecoveryCode}>{tr('কোড কপি করুন','Copy recovery code')}</button>
     {notice && <div className="auth-notice">{notice}</div>}
-    <button type="button" className="auth-submit" onClick={()=>{setNewRecoveryCode('');setNotice('');}}>কোড সংরক্ষণ করেছি — চালিয়ে যান</button>
+    <button type="button" className="auth-submit" onClick={()=>{setNewRecoveryCode('');setNotice('');}} >{tr('কোড সংরক্ষণ করেছি — চালিয়ে যান','I have saved the code — Continue')}</button>
     <small>এই কোড আর পরে দেখানো হবে না। কাউকে দেবেন না। ফোন হারালে কোডটি আলাদা নিরাপদ জায়গায় রাখুন।</small>
   </section></div>;
   if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}><div className="language-switch"><button type="button" className={lang==='bn'?'active':''} onClick={()=>setLang('bn')}>বাংলা</button><button type="button" className={lang==='en'?'active':''} onClick={()=>setLang('en')}>English</button></div>
     <div className="auth-mark"><MessageCircle size={28}/></div>
     <h1>Happy Time Connect</h1>
-    <p>মোবাইল নম্বর ও ৬ অক্ষরের পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন বা প্রবেশ করুন।</p>
+    <p>{tr('মোবাইল নম্বর ও ৬ অক্ষরের পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন বা প্রবেশ করুন।','Create an account or sign in with your mobile number and 6-character password.')}</p>
     {!isSupabaseConfigured && <div className="auth-error">Supabase URL ও Publishable Key সেট করা নেই।</div>}
     <div className="auth-mode-switch">
       <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');setNotice('');}}>সাইন আপ</button>
       <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');setNotice('');}}>লগইন</button>
     </div>
-    <label>দেশ নির্বাচন ও মোবাইল নম্বর</label>
+    <label>{tr('দেশ নির্বাচন ও মোবাইল নম্বর','Country and mobile number')}</label>
     <div className="phone-entry">
       <select className="country-select" value={country} onChange={e=>{setCountry(e.target.value);setPhone('');}} aria-label="দেশের কোড নির্বাচন">
         {countryOptions.map(item=><option key={item.iso} value={item.iso}>{item.name} (+{item.dial})</option>)}
@@ -223,18 +227,18 @@ function App() {\n  const [lang,setLang] = useState(() => localStorage.getItem('
     </div>
     {mode==='forgot' && <>
       <label>৪ সংখ্যার Recovery Code</label>
-      <input className="auth-input" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="৪ সংখ্যার কোড" inputMode="numeric" maxLength={4}/>
+      <input className="auth-input" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder={tr('৪ সংখ্যার কোড','4-digit recovery code')} inputMode="numeric" maxLength={4}/>
     </>}
-    <label>{mode==='forgot'?'নতুন ৬ অক্ষরের পাসওয়ার্ড':'৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)'}</label>
-    <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder="৬ অক্ষরের পাসওয়ার্ড" type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
+    <label>{mode==='forgot'?tr('নতুন ৬ অক্ষরের পাসওয়ার্ড','New 6-character password'):tr('৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)','6-character password (letters or numbers)')}</label>
+    <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder={tr('৬ অক্ষরের পাসওয়ার্ড','6-character password')} type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
     {mode==='login' && <button type="button" className="forgot-link" onClick={()=>{setMode('forgot');setPin('');setError('');setNotice('');}}>পাসওয়ার্ড ভুলে গেছেন? Forgot Password</button>}
     <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'সাইন আপ':mode==='forgot'?'নতুন পাসওয়ার্ড সেট করুন':'লগইন'}</button>
     <p className="facebook-note">{tr('পরামর্শ: আপনি যদি Facebook-এর মাধ্যমে লগইন করেন, তাহলে ভবিষ্যতে অ্যাকাউন্টে প্রবেশ বা তথ্য ফিরে পেতে এটি সহায়ক হতে পারে।','Tip: If you sign in with Facebook, it may help you regain access to your account or recover your information in the future.')}</p>
     <button type="button" className="facebook-login" onClick={async()=>{setError('');const {error:e}=await supabase.auth.signInWithOAuth({provider:'facebook',options:{redirectTo:window.location.origin}});if(e)setError(e.message);}}>{tr('Facebook দিয়ে লগইন (ঐচ্ছিক)','Continue with Facebook (Optional)')}</button>
-    {mode==='forgot' && <button type="button" className="auth-back" onClick={()=>{setMode('login');setError('');}}>লগইনে ফিরে যান</button>}
+    {mode==='forgot' && <button type="button" className="auth-back" onClick={()=>{setMode('login');setError('');}} >{tr('লগইনে ফিরে যান','Back to login')}</button>}
     {notice && <div className="auth-notice">{notice}</div>}
     {error && <div className="auth-error">{error}</div>}
-    <small>SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৪ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।</small>
+    <small>{tr('SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৪ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।','No SMS/OTP is required. Keep the 4-digit recovery code from signup in a safe place.')}</small>
   </form></div>;
   return <MainApp lang={lang} setLang={setLang}/>;
 }
