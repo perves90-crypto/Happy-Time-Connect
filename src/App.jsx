@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { getMyProfile, findUserByPhone, listMyConversations, createConversation, fetchMessages, sendMessage, subscribeToMessages } from './lib/chatService';
+import { getMyProfile, findUserByPhone, listMyConversations, createConversation, addConversationMember, fetchMessages, sendMessage, subscribeToMessages } from './lib/chatService';
 import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault, listenForChatDownloads } from './lib/localVault';
 import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw } from 'lucide-react';
 
@@ -104,13 +104,9 @@ function StoragePanel({ lang }) {
 }
 
 
-function FeatureWorkspace({ active, lang }) {
+function FeatureWorkspace({ active, lang, groups = [], onCreateGroup, onOpenGroup, onAddGroupMembers }) {
   const tr = (bn,en) => lang === 'bn' ? bn : en;
-  const [groups,setGroups] = useState([
-    {name:'পরিবার',members:8,desc:'পরিবারের সবার সাথে যোগাযোগ',tone:'mint'},
-    {name:'বন্ধুমহল',members:12,desc:'বন্ধুদের আড্ডা ও খবর',tone:'blue'},
-    {name:'কাজের টিম',members:6,desc:'কাজের আপডেট ও আলোচনা',tone:'orange'},
-  ]);
+  const [groupPhones,setGroupPhones] = useState('');
   const [groupName,setGroupName] = useState('');
   const [showCreate,setShowCreate] = useState(false);
   const [notice,setNotice] = useState('');
@@ -128,9 +124,10 @@ function FeatureWorkspace({ active, lang }) {
     </div>
     {isGroups && <>
       <div className="feature-toolbar"><div><h3>{tr('গ্রুপ তালিকা','Group list')}</h3><p>{tr('আপনার তৈরি করা গ্রুপগুলো','Groups you create')}</p></div><button className="feature-primary" onClick={()=>setShowCreate(v=>!v)}><Plus size={17}/>{tr('নতুন গ্রুপ','New group')}</button></div>
-      {showCreate && <form className="feature-create panel-card" onSubmit={e=>{e.preventDefault();if(!groupName.trim())return;setGroups(v=>[{name:groupName.trim(),members:1,desc:tr('নতুন গ্রুপ · সদস্য যোগ করা বাকি','New group · invite members next'),tone:'mint'},...v]);setGroupName('');setShowCreate(false);setNotice(tr('গ্রুপের ইন্টারফেস তৈরি হয়েছে। সদস্য যোগ ও সার্ভার সংযোগ পরের ধাপ।','Group interface created. Member invites and server connection are the next step.'));}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><button className="feature-primary" type="submit">{tr('তৈরি করুন','Create')}</button></form>}
+      {showCreate && <form className="feature-create panel-card" onSubmit={async e=>{e.preventDefault();if(!groupName.trim())return;try{await onCreateGroup(groupName.trim(),groupPhones);setGroupName('');setGroupPhones('');setShowCreate(false);setNotice(tr('গ্রুপ তৈরি হয়েছে। এখন চ্যাট ট্যাবে মেসেজ পাঠাতে পারবেন।','Group created. You can now message in the Chats tab.'));}catch(error){setNotice(error.message||'Could not create group.');}}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><input value={groupPhones} onChange={e=>setGroupPhones(e.target.value)} placeholder={tr('সদস্যদের ফোন নম্বর, কমা দিয়ে আলাদা করুন (+880...)','Member phone numbers, comma separated (+880...)')}/><button className="feature-primary" type="submit">{tr('গ্রুপ তৈরি করুন','Create group')}</button></form>}
       <div className="feature-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr('গ্রুপ খুঁজুন','Search groups')}/></div>
-      <div className="feature-card-grid">{groups.filter(g=>g.name.toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.name}><div className={'feature-item-icon '+g.tone}><Users size={23}/></div><div className="feature-item-title"><h3>{g.name}</h3><span>{g.members} {tr('জন সদস্য','members')}</span></div><p>{g.desc}</p><button onClick={()=>setNotice(tr('এই গ্রুপের মেসেজিং চালু করতে সার্ভার ও সদস্য সংযোগ প্রয়োজন।','Connect the messaging service and members to open this group.'))}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button></article>)}</div>
+      <div className="feature-card-grid">{groups.filter(g=>(g.title||'').toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.id}><div className={'feature-item-icon '+(i%2?'blue':'mint')}><Users size={23}/></div><div className="feature-item-title"><h3>{g.title||'Group'}</h3><span>{g.members?.length||1} {tr('জন সদস্য','members')}</span></div><p>{g.lastMessage?.body||tr('এখনো কোনো মেসেজ নেই','No messages yet')}</p><button onClick={()=>onOpenGroup(g)}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button><button onClick={async()=>{const phones=window.prompt(tr('যাদের যোগ করবেন তাদের ফোন নম্বর কমা দিয়ে লিখুন','Enter phone numbers to add, separated by commas'));if(phones)try{await onAddGroupMembers(g,phones);setNotice(tr('সদস্য যোগ হয়েছে।','Members added.'));}catch(error){setNotice(error.message||'Could not add members.');}}}>{tr('সদস্য যোগ','Add members')}</button></article>)}</div>
+      {!groups.length&&<div className="feature-notice">{tr('এখনো কোনো গ্রুপ নেই। নতুন গ্রুপ তৈরি করুন।','No groups yet. Create your first group.')}</div>}
       {notice&&<div className="feature-notice">{notice}</div>}
     </>}
     {isCalls && <>
@@ -195,6 +192,29 @@ function MainApp({ lang, setLang }) {
     } catch (error) { setChatError(error.message || 'Could not start chat.'); }
     finally { setChatBusy(false); }
   }
+  async function createGroupFromForm(name, phoneText) {
+    const phones = [...new Set(phoneText.split(',').map(value=>value.trim()).filter(Boolean))];
+    const memberIds = [];
+    for (const phone of phones) {
+      const person = await findUserByPhone(phone);
+      if (!person) throw new Error(tr('নিবন্ধিত সদস্য পাওয়া যায়নি: ','No registered member found: ') + phone);
+      memberIds.push(person.user_id);
+    }
+    const conversation = await createConversation({kind:'group',title:name,memberIds});
+    await refreshConversations();
+    setSelectedConversation(conversation);
+    setActive('chats');
+    return conversation;
+  }
+  async function addGroupMembers(group, phoneText) {
+    const phones = [...new Set(phoneText.split(',').map(value=>value.trim()).filter(Boolean))];
+    for (const phone of phones) {
+      const person = await findUserByPhone(phone);
+      if (!person) throw new Error(tr('নিবন্ধিত সদস্য পাওয়া যায়নি: ','No registered member found: ') + phone);
+      await addConversationMember(group.id, person.user_id);
+    }
+    await refreshConversations();
+  }
   async function submitMessage(event) {
     event.preventDefault(); if (!selectedConversation || !message.trim()) return;
     const body=message.trim(); setMessage(''); setChatError('');
@@ -242,7 +262,7 @@ function MainApp({ lang, setLang }) {
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> {tr('আমার থিম সেভ করুন','Save my theme')}</button>
         </div>
       </section>}
-      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang}/>}
+      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers}/>}
       <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label))}</span></button>)}</nav>
