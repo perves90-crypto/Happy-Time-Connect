@@ -25,7 +25,7 @@ const palettes = [
 const themes = Array.from({length:50},(_,i)=>({id:i,name:themeNames[i],colors:palettes[i%palettes.length],variant:i%5}));
 const colorChoices = Array.from({length:120},(_,i)=>`hsl(${Math.round(i*3)} 78% ${[42,50,58,66][Math.floor(i/30)]}%)`);
 
-function MainApp() {
+function MainApp({ lang, setLang }) {\n  const tr = (bn, en) => lang === 'bn' ? bn : en;
   const [active,setActive] = useState('chats');
   const [query,setQuery] = useState('');
   const [message,setMessage] = useState('');
@@ -40,7 +40,7 @@ function MainApp() {
   useEffect(()=>{localStorage.setItem('htc-theme',String(selectedTheme));localStorage.setItem('htc-custom',JSON.stringify(custom));localStorage.setItem('htc-use-custom',String(useCustom));},[selectedTheme,custom,useCustom]);
 
   return <div className="app-shell" style={vars}>
-    <aside className={`sidebar ${mobileMenu?'show':''}`}>
+    <aside className={`sidebar ${mobileMenu?'show':''}`}><div className="language-switch app-language"><button onClick={()=>setLang('bn')} className={lang==='bn'?'active':''}>বাংলা</button><button onClick={()=>setLang('en')} className={lang==='en'?'active':''}>English</button></div>
       <div className="brand"><div className="brand-mark"><MessageCircle size={23}/></div><div><strong>Happy Time</strong><span>CONNECT</span></div></div>
       <div className="profile-card"><div className="avatar user">HT</div><div><b>স্বাগতম</b><small>আপনার অ্যাকাউন্ট</small></div><span className="online-dot"/></div>
       <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{label}</span></button>)}</nav>
@@ -86,7 +86,7 @@ const countryDialCodes = [
 const countryNames = new Intl.DisplayNames(['bn'], { type: 'region' });
 const countryOptions = countryDialCodes.map(([iso, dial]) => ({iso,dial,name:countryNames.of(iso)})).sort((a,b)=>a.name.localeCompare(b.name,'bn'));
 
-function App() {
+function App() {\n  const [lang,setLang] = useState(() => localStorage.getItem('htc-language') || 'bn');\n  const tr = (bn,en) => lang === 'bn' ? bn : en;\n  useEffect(() => { localStorage.setItem('htc-language',lang); }, [lang]);
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [country, setCountry] = useState('BD');
@@ -205,7 +205,7 @@ function App() {
     <button type="button" className="auth-submit" onClick={()=>{setNewRecoveryCode('');setNotice('');}}>কোড সংরক্ষণ করেছি — চালিয়ে যান</button>
     <small>এই কোড আর পরে দেখানো হবে না। কাউকে দেবেন না। ফোন হারালে কোডটি আলাদা নিরাপদ জায়গায় রাখুন।</small>
   </section></div>;
-  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}>
+  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}><div className="language-switch"><button type="button" className={lang==='bn'?'active':''} onClick={()=>setLang('bn')}>বাংলা</button><button type="button" className={lang==='en'?'active':''} onClick={()=>setLang('en')}>English</button></div>
     <div className="auth-mark"><MessageCircle size={28}/></div>
     <h1>Happy Time Connect</h1>
     <p>মোবাইল নম্বর ও ৬ অক্ষরের পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন বা প্রবেশ করুন।</p>
@@ -229,12 +229,14 @@ function App() {
     <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder="৬ অক্ষরের পাসওয়ার্ড" type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
     {mode==='login' && <button type="button" className="forgot-link" onClick={()=>{setMode('forgot');setPin('');setError('');setNotice('');}}>পাসওয়ার্ড ভুলে গেছেন? Forgot Password</button>}
     <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'সাইন আপ':mode==='forgot'?'নতুন পাসওয়ার্ড সেট করুন':'লগইন'}</button>
+    <p className="facebook-note">{tr('পরামর্শ: আপনি যদি Facebook-এর মাধ্যমে লগইন করেন, তাহলে ভবিষ্যতে অ্যাকাউন্টে প্রবেশ বা তথ্য ফিরে পেতে এটি সহায়ক হতে পারে।','Tip: If you sign in with Facebook, it may help you regain access to your account or recover your information in the future.')}</p>
+    <button type="button" className="facebook-login" onClick={async()=>{setError('');const {error:e}=await supabase.auth.signInWithOAuth({provider:'facebook',options:{redirectTo:window.location.origin}});if(e)setError(e.message);}}>{tr('Facebook দিয়ে লগইন (ঐচ্ছিক)','Continue with Facebook (Optional)')}</button>
     {mode==='forgot' && <button type="button" className="auth-back" onClick={()=>{setMode('login');setError('');}}>লগইনে ফিরে যান</button>}
     {notice && <div className="auth-notice">{notice}</div>}
     {error && <div className="auth-error">{error}</div>}
     <small>SMS/OTP প্রয়োজন নেই। সাইনআপের পর পাওয়া ৪ সংখ্যার Recovery Code নিরাপদে সংরক্ষণ করুন।</small>
   </form></div>;
-  return <MainApp/>;
+  return <MainApp lang={lang} setLang={setLang}/>;
 }
 
 export default App;
