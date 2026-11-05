@@ -47,7 +47,7 @@ function MainApp() {
       <div className="sidebar-bottom"><ShieldCheck size={17}/><span>নিরাপদ যোগাযোগ</span><button aria-label="Settings" onClick={()=>setActive('settings')}><Settings size={17}/></button></div>
     </aside>
     <main className="main-panel">
-      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">T.K FOOD PRODUCTS DISTRIBUTION LIMITED</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
+      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">আপনার যোগাযোগের জায়গা</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
       {active==='chats'&&<section className="content-grid">
         <div className="chat-list panel-card"><div className="section-heading"><div><h2>আপনার কথোপকথন</h2><p>ব্যক্তিগত ও গ্রুপ মেসেজ</p></div><button className="primary-icon" aria-label="New chat"><Plus size={19}/></button></div>
           <label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="চ্যাট খুঁজুন"/></label>
@@ -74,23 +74,30 @@ function MainApp() {
   </div>;
 }
 
+const countryDialCodes = [
+  ['AF','93'],['AL','355'],['DZ','213'],['AD','376'],['AO','244'],['AG','1-268'],['AR','54'],['AM','374'],['AU','61'],['AT','43'],['AZ','994'],
+  ['BS','1-242'],['BH','973'],['BD','880'],['BB','1-246'],['BY','375'],['BE','32'],['BZ','501'],['BJ','229'],['BT','975'],['BO','591'],['BA','387'],['BW','267'],['BR','55'],['BN','673'],['BG','359'],['BF','226'],['BI','257'],
+  ['KH','855'],['CM','237'],['CA','1'],['CV','238'],['CF','236'],['TD','235'],['CL','56'],['CN','86'],['CO','57'],['KM','269'],['CG','242'],['CD','243'],['CR','506'],['CI','225'],['HR','385'],['CU','53'],['CY','357'],['CZ','420'],
+  ['DK','45'],['DJ','253'],['DM','1-767'],['DO','1-809'],['EC','593'],['EG','20'],['SV','503'],['GQ','240'],['ER','291'],['EE','372'],['SZ','268'],['ET','251'],['FJ','679'],['FI','358'],['FR','33'],['GA','241'],['GM','220'],['GE','995'],['DE','49'],['GH','233'],['GR','30'],['GD','1-473'],['GT','502'],['GN','224'],['GW','245'],['GY','592'],
+  ['HT','509'],['HN','504'],['HK','852'],['HU','36'],['IS','354'],['IN','91'],['ID','62'],['IR','98'],['IQ','964'],['IE','353'],['IL','972'],['IT','39'],['JM','1-876'],['JP','81'],['JO','962'],['KZ','7'],['KE','254'],['KI','686'],['KP','850'],['KR','82'],['KW','965'],['KG','996'],['LA','856'],['LV','371'],['LB','961'],['LS','266'],['LR','231'],['LY','218'],['LI','423'],['LT','370'],['LU','352'],
+  ['MO','853'],['MG','261'],['MW','265'],['MY','60'],['MV','960'],['ML','223'],['MT','356'],['MH','692'],['MR','222'],['MU','230'],['MX','52'],['FM','691'],['MD','373'],['MC','377'],['MN','976'],['ME','382'],['MA','212'],['MZ','258'],['MM','95'],['NA','264'],['NR','674'],['NP','977'],['NL','31'],['NZ','64'],['NI','505'],['NE','227'],['NG','234'],['MK','389'],['NO','47'],['OM','968'],['PK','92'],['PW','680'],['PS','970'],['PA','507'],['PG','675'],['PY','595'],['PE','51'],['PH','63'],['PL','48'],['PT','351'],['QA','974'],['RO','40'],['RU','7'],['RW','250'],
+  ['KN','1-869'],['LC','1-758'],['VC','1-784'],['WS','685'],['SM','378'],['ST','239'],['SA','966'],['SN','221'],['RS','381'],['SC','248'],['SL','232'],['SG','65'],['SK','421'],['SI','386'],['SB','677'],['SO','252'],['ZA','27'],['SS','211'],['ES','34'],['LK','94'],['SD','249'],['SR','597'],['SE','46'],['CH','41'],['SY','963'],['TW','886'],['TJ','992'],['TZ','255'],['TH','66'],['TL','670'],['TG','228'],['TO','676'],['TT','1-868'],['TN','216'],['TR','90'],['TM','993'],['TV','688'],['UG','256'],['UA','380'],['AE','971'],['GB','44'],['US','1'],['UY','598'],['UZ','998'],['VU','678'],['VA','379'],['VE','58'],['VN','84'],['YE','967'],['ZM','260'],['ZW','263']
+];
+const countryNames = new Intl.DisplayNames(['bn'], { type: 'region' });
+const countryOptions = countryDialCodes.map(([iso, dial]) => ({iso,dial,name:countryNames.of(iso)})).sort((a,b)=>a.name.localeCompare(b.name,'bn'));
+
 function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [country, setCountry] = useState('BD');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState('signup');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const normalizePhone = (value) => {
-    const cleaned = value.trim().replace(/[\\s()-]/g, '');
-    if (!/^\\+[1-9]\\d{7,14}$/.test(cleaned)) return null;
-    return cleaned;
-  };
-
-  const loginEmail = (normalizedPhone) =>
-    normalizedPhone.replace(/\\D/g, '') + '@phone.happytimeconnect.invalid';
+  const selectedCountry = countryOptions.find(item=>item.iso===country) || countryOptions.find(item=>item.iso==='BD');
+  const loginEmail = (fullPhone) => fullPhone.replace(/\\D/g, '') + '@phone.happytimeconnect.invalid';
 
   useEffect(() => {
     if (!supabase) { setChecking(false); return; }
@@ -108,13 +115,14 @@ function App() {
   async function handleAuth(e) {
     e.preventDefault();
     setError('');
-    const normalizedPhone = normalizePhone(phone);
-    if (!normalizedPhone) {
-      setError('দেশের কোডসহ সঠিক নম্বর লিখুন। উদাহরণ: +8801XXXXXXXXX');
+    const digits = phone.replace(/\\D/g, '');
+    const isBangladesh = country === 'BD';
+    if ((isBangladesh && !/^\\d{11}$/.test(digits)) || (!isBangladesh && !/^\\d{7,15}$/.test(digits))) {
+      setError(isBangladesh ? 'বাংলাদেশের ১১ সংখ্যার মোবাইল নম্বর লিখুন।' : 'নির্বাচিত দেশের সঠিক মোবাইল নম্বর লিখুন।');
       return;
     }
-    if (!/^\\d{8,12}$/.test(pin)) {
-      setError('নিরাপত্তার জন্য ৮ থেকে ১২ সংখ্যার PIN দিন।');
+    if (!/^[A-Za-z0-9]{6}$/.test(pin)) {
+      setError('পাসওয়ার্ড ঠিক ৬ অক্ষরের হতে হবে। ইংরেজি অক্ষর ও সংখ্যা ব্যবহার করতে পারবেন।');
       return;
     }
     if (!supabase) {
@@ -122,13 +130,10 @@ function App() {
       return;
     }
     setBusy(true);
-    const email = loginEmail(normalizedPhone);
+    const fullPhone = '+' + selectedCountry.dial.replace(/[^0-9]/g,'') + digits;
+    const email = loginEmail(fullPhone);
     const result = mode === 'signup'
-      ? await supabase.auth.signUp({
-          email,
-          password: pin,
-          options: { data: { phone: normalizedPhone, display_name: normalizedPhone } }
-        })
+      ? await supabase.auth.signUp({ email, password: pin, options: { data: { phone: fullPhone, display_name: fullPhone } } })
       : await supabase.auth.signInWithPassword({ email, password: pin });
     setBusy(false);
     if (result.error) {
@@ -136,28 +141,32 @@ function App() {
       return;
     }
     if (mode === 'signup' && !result.data.session) {
-      setError('অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু Email confirmation চালু আছে। Supabase-এ Confirm email বন্ধ করতে হবে।');
+      setError('অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু Supabase-এ Confirm email বন্ধ করতে হবে।');
     }
   }
 
   if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
   if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={handleAuth}>
     <div className="auth-mark"><MessageCircle size={28}/></div>
-    <p className="eyebrow">T.K FOOD PRODUCTS DISTRIBUTION LIMITED</p>
     <h1>Happy Time Connect</h1>
-    <p>মোবাইল নম্বর ও গোপন PIN দিয়ে প্রবেশ করুন।</p>
+    <p>মোবাইল নম্বর ও ৬ অক্ষরের পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন বা প্রবেশ করুন।</p>
     {!isSupabaseConfigured && <div className="auth-error">Supabase URL ও Publishable Key সেট করা নেই।</div>}
     <div className="auth-mode-switch">
-      <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');}}>নতুন অ্যাকাউন্ট</button>
-      <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');}}>আগের অ্যাকাউন্ট</button>
+      <button type="button" className={mode==='signup'?'active':''} onClick={()=>{setMode('signup');setError('');}}>সাইন আপ</button>
+      <button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');}}>লগইন</button>
     </div>
-    <label>মোবাইল নম্বর (দেশের কোডসহ)</label>
-    <input className="auth-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+8801XXXXXXXXX" autoComplete="tel" inputMode="tel"/>
-    <label>গোপন PIN (৮–১২ সংখ্যা)</label>
-    <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value)} placeholder="৮–১২ সংখ্যার PIN" type="password" inputMode="numeric" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={12}/>
-    <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'অ্যাকাউন্ট তৈরি করুন':'লগইন করুন'}</button>
+    <label>দেশ নির্বাচন ও মোবাইল নম্বর</label>
+    <div className="phone-entry">
+      <select className="country-select" value={country} onChange={e=>{setCountry(e.target.value);setPhone('');}}>
+        {countryOptions.map(item=><option key={item.iso} value={item.iso}>{item.name} (+{item.dial})</option>)}
+      </select>
+      <input className="auth-input phone-number-input" value={phone} onChange={e=>setPhone(e.target.value.replace(/\\D/g,'').slice(0,country==='BD'?11:15))} placeholder={country==='BD'?'01XXXXXXXXX':'মোবাইল নম্বর'} autoComplete="tel-national" inputMode="numeric"/>
+    </div>
+    <label>৬ অক্ষরের পাসওয়ার্ড (অক্ষর বা সংখ্যা)</label>
+    <input className="auth-input" value={pin} onChange={e=>setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} placeholder="৬ অক্ষরের পাসওয়ার্ড" type="password" autoComplete={mode==='signup'?'new-password':'current-password'} maxLength={6}/>
+    <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':mode==='signup'?'সাইন আপ':'লগইন'}</button>
     {error && <div className="auth-error">{error}</div>}
-    <small>এই পদ্ধতিতে SMS পাঠানো হয় না। একই ফোনে লগইন সেশন সংরক্ষিত থাকবে। PIN কাউকে জানাবেন না।</small>
+    <small>SMS/OTP প্রয়োজন নেই। প্রথমবার সাইন আপের পর একই নম্বর ও পাসওয়ার্ড দিয়ে লগইন করতে পারবেন।</small>
   </form></div>;
   return <MainApp/>;
 }
