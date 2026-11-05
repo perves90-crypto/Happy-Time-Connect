@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw } from 'lucide-react';
 
 const initialChats = [
@@ -24,7 +25,7 @@ const palettes = [
 const themes = Array.from({length:50},(_,i)=>({id:i,name:themeNames[i],colors:palettes[i%palettes.length],variant:i%5}));
 const colorChoices = Array.from({length:120},(_,i)=>`hsl(${Math.round(i*3)} 78% ${[42,50,58,66][Math.floor(i/30)]}%)`);
 
-function App() {
+function MainApp() {
   const [active,setActive] = useState('chats');
   const [query,setQuery] = useState('');
   const [message,setMessage] = useState('');
@@ -72,4 +73,76 @@ function App() {
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{label}</span></button>)}</nav>
   </div>;
 }
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!supabase) { setChecking(false); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecking(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next);
+      setChecking(false);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  async function requestCode(e) {
+    e.preventDefault(); setError(''); setNotice('');
+    if (!/^\\+[1-9]\\d{7,14}$/.test(phone.trim())) {
+      setError('দেশের কোডসহ নম্বর লিখুন। উদাহরণ: +8801XXXXXXXXX'); return;
+    }
+    if (!supabase) { setError('Supabase সংযোগ পাওয়া যায়নি।'); return; }
+    setBusy(true);
+    const { error: err } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
+    setBusy(false);
+    if (err) setError(err.message);
+    else { setSent(true); setNotice('OTP অনুরোধ পাঠানো হয়েছে। SMS Provider সক্রিয় না থাকলে SMS আসবে না।'); }
+  }
+
+  async function confirmCode(e) {
+    e.preventDefault(); setError(''); setNotice('');
+    setBusy(true);
+    const { error: err } = await supabase.auth.verifyOtp({
+      phone: phone.trim(), token: code.trim(), type: 'sms'
+    });
+    setBusy(false);
+    if (err) setError(err.message);
+  }
+
+  if (checking) return <div className="auth-screen"><div className="auth-card"><h1>Happy Time Connect</h1><p>অ্যাকাউন্ট যাচাই হচ্ছে...</p></div></div>;
+  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={sent ? confirmCode : requestCode}>
+    <div className="auth-mark"><MessageCircle size={28}/></div>
+    <p className="eyebrow">T.K FOOD PRODUCTS DISTRIBUTION LIMITED</p>
+    <h1>Happy Time Connect</h1>
+    <p>মোবাইল নম্বর দিয়ে নিরাপদে প্রবেশ করুন।</p>
+    {!isSupabaseConfigured && <div className="auth-error">Supabase URL ও Publishable Key সেট করা নেই।</div>}
+    {!sent ? <>
+      <label>মোবাইল নম্বর (দেশের কোডসহ)</label>
+      <input className="auth-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+8801XXXXXXXXX" autoComplete="tel"/>
+      <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy?'অপেক্ষা করুন...':'OTP পাঠান'}</button>
+    </> : <>
+      <label>SMS-এ পাওয়া OTP</label>
+      <input className="auth-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="OTP কোড" inputMode="numeric" autoComplete="one-time-code"/>
+      <button className="auth-submit" disabled={busy || code.trim().length < 4}>{busy?'যাচাই হচ্ছে...':'OTP যাচাই করে প্রবেশ করুন'}</button>
+      <button type="button" className="auth-back" onClick={()=>{setSent(false);setCode('');setError('');}}>নম্বর পরিবর্তন করুন</button>
+    </>}
+    {error && <div className="auth-error">{error}</div>}
+    {notice && <div className="auth-notice">{notice}</div>}
+    <small>সফলভাবে প্রবেশ করলে এই ডিভাইসে সেশন সংরক্ষিত থাকবে।</small>
+  </form></div>;
+  return <MainApp/>;
+}
+
 export default App;
+
