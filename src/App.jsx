@@ -200,13 +200,12 @@ function CallCenter({ lang, myProfile, conversations }) {
   useEffect(()=>{
     if(!myProfile?.id)return;
     const channel=supabase.channel('htc-call-inbox-'+myProfile.id)
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'recipient_id=eq.'+myProfile.id},payload=>{
-        console.log('[HTC CALL] Incoming signal received:',payload.new?.signal_type,payload.new?.id);
-        handleSignal(payload.new);
-      })
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'sender_id=eq.'+myProfile.id},payload=>{
-        console.log('[HTC CALL] Own signal received:',payload.new?.signal_type,payload.new?.id);
-        handleSignal(payload.new);
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals'},payload=>{
+        const row=payload.new;
+        if(row?.recipient_id===myProfile.id||row?.sender_id===myProfile.id){
+          console.log('[HTC CALL] Participant signal received:',row?.signal_type,row?.id,'recipient:',row?.recipient_id);
+          handleSignal(row);
+        }
       })
       .subscribe((status,error)=>{
         console.log('[HTC CALL] Realtime subscription:',status,error||'');
