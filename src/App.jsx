@@ -173,11 +173,11 @@ function CallCenter({ lang, myProfile, conversations }) {
   async function startCall(callMode){
     if(!selected||!peerId)return;
     try{setNotice('');setMode(callMode);setStatus('calling');const key=crypto.randomUUID();const pc=await makePeer(selected.id,peerId,key,callMode);const offer=await pc.createOffer();await pc.setLocalDescription(offer);
-      const {error}=await supabase.from('htc_call_signals').insert({conversation_id:selected.id,sender_id:myProfile.id,recipient_id:peerId,signal_type:'offer',payload:{callKey:key,sdp:offer,mode:callMode}});
+      const {data:offerSignal,error}=await supabase.from('htc_call_signals').insert({conversation_id:selected.id,sender_id:myProfile.id,recipient_id:peerId,signal_type:'offer',payload:{callKey:key,sdp:offer,mode:callMode}}).select('id').single();
       if(error)throw error;
       // Ask the trusted Edge Function to notify the recipient's registered Android devices.
       // The function verifies the signed-in caller and the stored offer before sending FCM.
-      const {error:pushError}=await supabase.functions.invoke('send-call-push',{body:{callSignalId:(await supabase.from('htc_call_signals').select('id').eq('conversation_id',selected.id).eq('sender_id',myProfile.id).eq('recipient_id',peerId).eq('signal_type','offer').contains('payload',{callKey:key}).order('created_at',{ascending:false}).limit(1).maybeSingle()).data?.id}});
+      const {error:pushError}=await supabase.functions.invoke('send-call-push',{body:{callSignalId:offerSignal.id}});
       if(pushError)console.warn('Call push notification could not be sent:',pushError.message);
     }catch(error){await cleanup();setNotice(error.message||tr('কল শুরু করা যায়নি','Could not start call'));}
   }
