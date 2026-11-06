@@ -140,9 +140,9 @@ body{background:radial-gradient(ellipse at 78% 8%,color-mix(in srgb,var(--user-a
 
 
 /* Account profile and settings menu */
-.account-avatar-button{position:relative;width:42px;height:42px;padding:0;border:1px solid #ffffff30;border-radius:50%;background:linear-gradient(145deg,#5ff5ca,#087b80);color:#063331;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 5px 16px #0003}
+.account-avatar-button{position:relative;z-index:20;pointer-events:auto;touch-action:manipulation;width:46px;height:46px;min-width:46px;padding:0;border:1px solid #ffffff30;border-radius:50%;background:linear-gradient(145deg,#5ff5ca,#087b80);color:#063331;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 5px 16px #0003}
 .account-avatar-button>img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.account-avatar-button>i{position:absolute;right:-5px;bottom:-4px;width:20px;height:20px;display:grid;place-items:center;border:2px solid #102d37;border-radius:50%;background:#dffff5;color:#075b55}
+.account-avatar-button>i{pointer-events:none;position:absolute;right:-5px;bottom:-4px;width:20px;height:20px;display:grid;place-items:center;border:2px solid #102d37;border-radius:50%;background:#dffff5;color:#075b55}
 .profile-card-button{width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer}
 .profile-card-photo{object-fit:cover}
 .account-modal-backdrop{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:16px;background:#020b12c9;backdrop-filter:blur(9px)}
