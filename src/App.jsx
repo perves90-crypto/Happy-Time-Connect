@@ -4,7 +4,6 @@ import { getMyProfile, findUserByPhone, listMyConversations, createConversation,
 import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault, listenForChatDownloads } from './lib/localVault';
 import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw, QrCode, Contact, UserPlus, Camera, X, Bell, User, LogOut, Shield, CircleDot, Save, ImagePlus } from 'lucide-react';
 import QRCode from 'qrcode';
-import { registerDevicePush } from './lib/pushNotifications';
 
 const initialChats = [
   { name: 'Pusti Consumer Team', message: 'আজকের মিটিংয়ের সময় জানানো হবে।', time: '10:42', unread: 3, group: true, color: 'mint' },
@@ -438,10 +437,6 @@ function MainApp({ lang, setLang }) {
     refreshConversations().catch(error => { if (alive) setChatError(error.message || 'Chat service is not ready.'); });
     return () => { alive = false; };
   }, []);
-  useEffect(() => {
-    if (!myProfile?.id) return;
-    registerDevicePush(myProfile.id);
-  }, [myProfile?.id]);
   useEffect(() => {
     const openCalls = () => setActive('calls');
     window.addEventListener('htc:incoming-call-push', openCalls);
