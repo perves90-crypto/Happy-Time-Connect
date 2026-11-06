@@ -11,9 +11,9 @@ const permissions = [
 ];
 
 for (const permission of permissions) {
-  const declaration = \`    <uses-permission android:name="\${permission}" />\`;
-  if (!manifest.includes(\`android:name="\${permission}"\`)) {
-    manifest = manifest.replace('<application', \`\${declaration}\\n    <application\`);
+  const declaration = '    <uses-permission android:name="' + permission + '" />';
+  if (!manifest.includes('android:name="' + permission + '"')) {
+    manifest = manifest.replace('<application', declaration + '\n    <application');
   }
 }
 
