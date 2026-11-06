@@ -17,7 +17,7 @@ writeFileSync('android/app/google-services.json', json);
 const rootGradle = 'android/build.gradle';
 let root = readFileSync(rootGradle, 'utf8');
 if (!root.includes('com.google.gms.google-services')) {
-  root = root.replace(/plugins\\s*\\{/, match => match + "\\n    id 'com.google.gms.google-services' version '4.4.2' apply false");
+  root = root.replace(/plugins\s*\{/, match => match + "\n    id 'com.google.gms.google-services' version '4.4.2' apply false");
   if (!root.includes('com.google.gms.google-services')) throw new Error('Could not add Google Services plugin to android/build.gradle.');
   writeFileSync(rootGradle, root);
 }
@@ -25,7 +25,7 @@ if (!root.includes('com.google.gms.google-services')) {
 const appGradle = 'android/app/build.gradle';
 let app = readFileSync(appGradle, 'utf8');
 if (!app.includes("id 'com.google.gms.google-services'")) {
-  app = app.replace(/plugins\\s*\\{/, match => match + "\\n    id 'com.google.gms.google-services'");
+  app = app.replace(/plugins\s*\{/, match => match + "\n    id 'com.google.gms.google-services'");
   if (!app.includes("id 'com.google.gms.google-services'")) throw new Error('Could not apply Google Services plugin to app/build.gradle.');
   writeFileSync(appGradle, app);
 }
