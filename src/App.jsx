@@ -437,7 +437,8 @@ function MainApp({ lang, setLang }) {
     let alive = true;
     refreshConversations().catch(error => { if (alive) setChatError(error.message || 'Chat service is not ready.'); });
     return () => { alive = false; };
-  }, []);\n  useEffect(() => {
+  }, []);
+  useEffect(() => {
     if (!myProfile?.id) return;
     registerDevicePush(myProfile.id);
   }, [myProfile?.id]);
