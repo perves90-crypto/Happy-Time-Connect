@@ -117,6 +117,7 @@ function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup,
   const [memberGroup,setMemberGroup] = useState(null);
   const [memberMode,setMemberMode] = useState('manual');
   const [memberPhones,setMemberPhones] = useState('');
+  const [pendingInvitePhones,setPendingInvitePhones] = useState('');
   const [memberBusy,setMemberBusy] = useState(false);
   const [qrData,setQrData] = useState('');
   const [showMyQr,setShowMyQr] = useState(false);
@@ -179,11 +180,27 @@ function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup,
     if (!memberGroup || !memberPhones.trim()) return;
     setMemberBusy(true);
     try {
-      await onAddGroupMembers(memberGroup, memberPhones);
-      setNotice(tr('সদস্য সফলভাবে যোগ হয়েছে।','Member added successfully.'));
-      setMemberGroup(null); setMemberPhones(''); setScannerOn(false);
+      const result = await onAddGroupMembers(memberGroup, memberPhones);
+      if (result?.unregistered?.length) {
+        setPendingInvitePhones(result.unregistered.join(', '));
+        setNotice(tr('কিছু নম্বর এখনো নিবন্ধিত নয়। তাদের আমন্ত্রণ পাঠান।','Some numbers are not registered yet. Send them an invitation.'));
+      } else {
+        setNotice(tr('সদস্য সফলভাবে যোগ হয়েছে।','Member added successfully.'));
+        setMemberGroup(null); setMemberPhones(''); setScannerOn(false);
+      }
     } catch (error) { setNotice(error.message || 'Could not add member.'); }
     finally { setMemberBusy(false); }
+  }
+  async function sendPendingInvites() {
+    const numbers = pendingInvitePhones.split(',').map(v=>v.trim()).filter(Boolean);
+    if (!numbers.length) return;
+    const inviteText = tr('আমি Happy Time Connect ব্যবহার করছি। আপনিও অ্যাপটিতে নিবন্ধন করে আমার সাথে যুক্ত হন: ','I am using Happy Time Connect. Register in the app and connect with me: ') + window.location.origin;
+    try {
+      if (navigator.share) await navigator.share({ title:'Happy Time Connect', text:inviteText, url:window.location.origin });
+      else window.location.href = 'sms:' + numbers.join(',') + '?body=' + encodeURIComponent(inviteText);
+      setPendingInvitePhones('');
+      setNotice(tr('আমন্ত্রণ পাঠানোর জন্য শেয়ার অপশন খোলা হয়েছে।','Share opened so you can send the invitation.'));
+    } catch (error) { if (error.name !== 'AbortError') setNotice(error.message || 'Could not open sharing.'); }
   }
   const title = isGroups ? tr('আপনার গ্রুপসমূহ','Your Groups') : isCalls ? tr('কল ও মিটিং','Calls & Meetings') : tr('প্রাইভেট চ্যাট','Private Chat');
   const subtitle = isGroups ? tr('পরিবার, বন্ধু ও কাজের দলের জন্য আলাদা জায়গা','A space for family, friends and teams') : isCalls ? tr('অডিও ও ভিডিও যোগাযোগের কেন্দ্র','Your audio and video communication hub') : tr('গোপন কোড দিয়ে সুরক্ষিত ব্যক্তিগত জায়গা','A protected space with a secret code');
@@ -194,7 +211,7 @@ function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup,
     </div>
     {isGroups && <>
       <div className="feature-toolbar"><div><h3>{tr('গ্রুপ তালিকা','Group list')}</h3><p>{tr('আপনার তৈরি করা গ্রুপগুলো','Groups you create')}</p></div><button className="feature-primary" onClick={()=>setShowCreate(v=>!v)}><Plus size={17}/>{tr('নতুন গ্রুপ','New group')}</button></div>
-      {showCreate && <form className="feature-create panel-card" onSubmit={async e=>{e.preventDefault();if(!groupName.trim())return;try{await onCreateGroup(groupName.trim(),groupPhones);setGroupName('');setGroupPhones('');setShowCreate(false);setNotice(tr('গ্রুপ তৈরি হয়েছে। এখন চ্যাট ট্যাবে মেসেজ পাঠাতে পারবেন।','Group created. You can now message in the Chats tab.'));}catch(error){setNotice(error.message||'Could not create group.');}}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><input value={groupPhones} onChange={e=>setGroupPhones(e.target.value)} placeholder={tr('সদস্যদের ফোন নম্বর, কমা দিয়ে আলাদা করুন (+880...)','Member phone numbers, comma separated (+880...)')}/><button className="feature-primary" type="submit">{tr('গ্রুপ তৈরি করুন','Create group')}</button></form>}
+      {showCreate && <form className="feature-create panel-card" onSubmit={async e=>{e.preventDefault();if(!groupName.trim())return;try{const result=await onCreateGroup(groupName.trim(),groupPhones);setGroupName('');setGroupPhones('');setShowCreate(false);if(result?.unregistered?.length){setPendingInvitePhones(result.unregistered.join(', '));setNotice(tr('গ্রুপ তৈরি হয়েছে। কিছু নম্বর এখনো নিবন্ধিত নয়—তাদের আমন্ত্রণ পাঠান।','Group created. Some numbers are not registered yet—invite them to join.'));}else setNotice(tr('গ্রুপ তৈরি হয়েছে। এখন চ্যাট ট্যাবে মেসেজ পাঠাতে পারবেন।','Group created. You can now message in the Chats tab.'));}catch(error){setNotice(error.message||'Could not create group.');}}}><input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder={tr('গ্রুপের নাম লিখুন','Enter group name')} maxLength={40}/><input value={groupPhones} onChange={e=>setGroupPhones(e.target.value)} placeholder={tr('সদস্যদের ফোন নম্বর, কমা দিয়ে আলাদা করুন (+880...)','Member phone numbers, comma separated (+880...)')}/><button className="feature-primary" type="submit">{tr('গ্রুপ তৈরি করুন','Create group')}</button></form>}
       <div className="feature-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr('গ্রুপ খুঁজুন','Search groups')}/></div>
       <div className="feature-card-grid">{groups.filter(g=>(g.title||'').toLowerCase().includes(search.toLowerCase())).map((g,i)=><article className="feature-item panel-card" key={g.id}><div className={'feature-item-icon '+(i%2?'blue':'mint')}><Users size={23}/></div><div className="feature-item-title"><h3>{g.title||'Group'}</h3><span>{g.members?.length||1} {tr('জন সদস্য','members')}</span></div><p>{g.lastMessage?.body||tr('এখনো কোনো মেসেজ নেই','No messages yet')}</p><button onClick={()=>onOpenGroup(g)}>{tr('গ্রুপ খুলুন','Open group')} <span>→</span></button><button onClick={()=>{setMemberGroup(g);setMemberPhones('');setMemberMode('manual');setScannerError('');setScannerOn(false);}}><UserPlus size={15}/> {tr('সদস্য যোগ','Add members')}</button></article>)}</div>
       {!groups.length&&<div className="feature-notice">{tr('এখনো কোনো গ্রুপ নেই। নতুন গ্রুপ তৈরি করুন।','No groups yet. Create your first group.')}</div>}
@@ -208,13 +225,14 @@ function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup,
           </div>
           {memberMode==='qr' && <div className="qr-scan-box"><video ref={videoRef} playsInline muted/><p>{tr('অন্য সদস্যের Happy Time Connect QR কোড ক্যামেরার সামনে ধরুন।','Point the camera at another member’s Happy Time Connect QR code.')}</p>{scannerError&&<div className="vault-error">{scannerError}</div>}</div>}
           <label className="member-number-label">{tr('ফোন নম্বর','Phone number')}<input value={memberPhones} onChange={e=>setMemberPhones(e.target.value)} placeholder="+8801XXXXXXXXX" inputMode="tel"/></label>
-          <small>{tr('একাধিক নম্বর হলে কমা দিয়ে আলাদা করুন। সদস্যের অ্যাকাউন্ট আগে থেকে নিবন্ধিত থাকতে হবে।','Separate multiple numbers with commas. Each member must already have a registered account.')}</small>
+          <small>{tr('একাধিক নম্বর হলে কমা দিয়ে আলাদা করুন। নিবন্ধিত সদস্য যুক্ত হবে; অনিবন্ধিত সদস্যকে আমন্ত্রণ পাঠাতে পারবেন।','Separate multiple numbers with commas. Registered members will be added; you can invite unregistered people.')}</small>
           <button className="feature-primary member-submit" disabled={!memberPhones.trim()||memberBusy} onClick={submitMemberAdd}>{memberBusy?tr('যোগ হচ্ছে...','Adding...'):tr('সদস্য যোগ করুন','Add member')}</button>
         </div>
       </div>}
       {showMyQr && <div className="member-modal-backdrop" role="dialog" aria-modal="true"><div className="member-modal panel-card my-qr-card"><button className="icon-btn qr-close" onClick={()=>setShowMyQr(false)}><X size={20}/></button><h3>{tr('আমার QR কোড','My QR code')}</h3><p>{tr('অন্যরা এই কোড স্ক্যান করে আপনার নম্বর দিয়ে গ্রুপে যোগ করতে পারবে।','Others can scan this code to add you to a group.')}</p>{myQr?<img src={myQr} alt="My Happy Time Connect QR"/>:<p>{tr('QR তৈরি হচ্ছে...','Generating QR...')}</p>}<small>{myProfile?.phone||''}</small></div></div>}
       <div className="my-qr-action"><button onClick={()=>setShowMyQr(true)}><QrCode size={16}/>{tr('আমার QR কোড দেখান','Show my QR code')}</button></div>
       {notice&&<div className="feature-notice">{notice}</div>}
+      {pendingInvitePhones&&<div className="feature-notice"><button className="feature-primary" type="button" onClick={sendPendingInvites}>{tr('অনিবন্ধিত নম্বরে আমন্ত্রণ পাঠান','Invite unregistered numbers')}</button><button type="button" onClick={()=>setPendingInvitePhones('')}>{tr('এখন নয়','Not now')}</button></div>}
     </>}
     {isCalls && <>
       <div className="call-action-grid"><button className="call-action audio" onClick={()=>setNotice(tr('অডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Audio call interface is ready. A calling service connection is required to place calls.'))}><span><Phone size={25}/></span><b>{tr('অডিও কল','Audio call')}</b><small>{tr('শুধু কথা বলুন','Voice only')}</small></button><button className="call-action video" onClick={()=>setNotice(tr('ভিডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Video call interface is ready. A calling service connection is required to place calls.'))}><span><Video size={25}/></span><b>{tr('ভিডিও কল','Video call')}</b><small>{tr('সামনাসামনি কথা বলুন','Face to face')}</small></button><button className="call-action group-call" onClick={()=>setNotice(tr('গ্রুপ কলের ইন্টারফেস প্রস্তুত। একাধিক অংশগ্রহণকারীর জন্য কল সার্ভিস প্রয়োজন।','Group call interface is ready. A calling service is required for multiple participants.'))}><span><Users size={25}/></span><b>{tr('গ্রুপ কল','Group call')}</b><small>{tr('একসাথে কথা বলুন','Talk together')}</small></button></div>
@@ -281,25 +299,28 @@ function MainApp({ lang, setLang }) {
   async function createGroupFromForm(name, phoneText) {
     const phones = [...new Set(phoneText.split(',').map(value=>value.trim()).filter(Boolean))];
     const memberIds = [];
+    const unregistered = [];
     for (const phone of phones) {
       const person = await findUserByPhone(phone);
-      if (!person) throw new Error(tr('নিবন্ধিত সদস্য পাওয়া যায়নি: ','No registered member found: ') + phone);
-      memberIds.push(person.user_id);
+      if (!person) unregistered.push(phone);
+      else memberIds.push(person.user_id);
     }
     const conversation = await createConversation({kind:'group',title:name,memberIds});
     await refreshConversations();
     setSelectedConversation(conversation);
     setActive('chats');
-    return conversation;
+    return {conversation,unregistered};
   }
   async function addGroupMembers(group, phoneText) {
     const phones = [...new Set(phoneText.split(',').map(value=>value.trim()).filter(Boolean))];
+    const unregistered = [];
     for (const phone of phones) {
       const person = await findUserByPhone(phone);
-      if (!person) throw new Error(tr('নিবন্ধিত সদস্য পাওয়া যায়নি: ','No registered member found: ') + phone);
+      if (!person) { unregistered.push(phone); continue; }
       await addConversationMember(group.id, person.user_id);
     }
     await refreshConversations();
+    return {unregistered};
   }
   async function submitMessage(event) {
     event.preventDefault(); if (!selectedConversation || !message.trim()) return;
