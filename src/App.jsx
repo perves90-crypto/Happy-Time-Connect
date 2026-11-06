@@ -105,7 +105,90 @@ function StoragePanel({ lang }) {
 }
 
 
-function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup, onOpenGroup, onAddGroupMembers }) {
+
+function CallCenter({ lang, myProfile, conversations }) {
+  const tr=(bn,en)=>lang==='bn'?bn:en;
+  const [targetId,setTargetId]=useState('');
+  const [mode,setMode]=useState('audio');
+  const [status,setStatus]=useState('idle');
+  const [incoming,setIncoming]=useState(null);
+  const [notice,setNotice]=useState('');
+  const [muted,setMuted]=useState(false);
+  const [cameraOn,setCameraOn]=useState(true);
+  const [seconds,setSeconds]=useState(0);
+  const pcRef=useRef(null), localRef=useRef(null), remoteRef=useRef(null), localVideoRef=useRef(null), callRef=useRef(null), queuedIceRef=useRef([]);
+  const privateChats=conversations.filter(c=>c.kind==='private'&&c.members?.some(m=>m.user_id!==myProfile?.id));
+  const selected=privateChats.find(c=>c.id===targetId);
+  const peerId=selected?.members?.find(m=>m.user_id!==myProfile?.id)?.user_id;
+  async function cleanup(next='idle'){
+    try{pcRef.current?.close();}catch{}
+    pcRef.current=null; localRef.current?.getTracks().forEach(t=>t.stop()); localRef.current=null;
+    if(remoteRef.current)remoteRef.current.srcObject=null;
+    if(localVideoRef.current)localVideoRef.current.srcObject=null;
+    callRef.current=null;queuedIceRef.current=[];setIncoming(null);setStatus(next);setSeconds(0);
+  }
+  async function makePeer(conversationId,recipientId,callKey,callMode){
+    const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+    pcRef.current=pc;callRef.current={conversationId,recipientId,callKey};
+    pc.ontrack=e=>{if(remoteRef.current)remoteRef.current.srcObject=e.streams[0];};
+    pc.onicecandidate=e=>{if(e.candidate)supabase.from('htc_call_signals').insert({conversation_id:conversationId,sender_id:myProfile.id,recipient_id:recipientId,signal_type:'ice-candidate',payload:{callKey,candidate:e.candidate.toJSON()}}).then(({error})=>{if(error)setNotice(error.message);});};
+    pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed')setNotice(tr('নেটওয়ার্ক সংযোগ ব্যর্থ হয়েছে।','Network connection failed.'));};
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:callMode==='video'});
+    localRef.current=stream;stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+    if(localVideoRef.current){localVideoRef.current.srcObject=stream;localVideoRef.current.play().catch(()=>{});}
+    return pc;
+  }
+  async function startCall(callMode){
+    if(!selected||!peerId)return;
+    try{setNotice('');setMode(callMode);setStatus('calling');const key=crypto.randomUUID();const pc=await makePeer(selected.id,peerId,key,callMode);const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      const {error}=await supabase.from('htc_call_signals').insert({conversation_id:selected.id,sender_id:myProfile.id,recipient_id:peerId,signal_type:'offer',payload:{callKey:key,sdp:offer,mode:callMode}});
+      if(error)throw error;
+    }catch(error){await cleanup();setNotice(error.message||tr('কল শুরু করা যায়নি','Could not start call'));}
+  }
+  async function acceptCall(){
+    if(!incoming)return;
+    try{setMode(incoming.mode||'audio');setStatus('connecting');const pc=await makePeer(incoming.conversation_id,incoming.sender_id,incoming.callKey,incoming.mode||'audio');await pc.setRemoteDescription(new RTCSessionDescription(incoming.sdp));
+      for(const candidate of queuedIceRef.current)await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(()=>{});queuedIceRef.current=[];
+      const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
+      const {error}=await supabase.from('htc_call_signals').insert({conversation_id:incoming.conversation_id,sender_id:myProfile.id,recipient_id:incoming.sender_id,signal_type:'answer',payload:{callKey:incoming.callKey,sdp:answer}});
+      if(error)throw error;setIncoming(null);setStatus('active');
+    }catch(error){await cleanup();setNotice(error.message||'Could not answer call');}
+  }
+  async function handleSignal(row){
+    const p=row.payload||{};
+    if(row.signal_type==='offer'&&row.recipient_id===myProfile.id&&!callRef.current){setIncoming({...row,...p,peerName:'Incoming call'});setStatus('ringing');}
+    else if(row.signal_type==='answer'&&row.recipient_id===myProfile.id&&callRef.current?.callKey===p.callKey&&pcRef.current){await pcRef.current.setRemoteDescription(new RTCSessionDescription(p.sdp)).catch(()=>{});setStatus('active');}
+    else if(row.signal_type==='ice-candidate'&&row.recipient_id===myProfile.id&&callRef.current?.callKey===p.callKey&&pcRef.current){if(pcRef.current.remoteDescription)await pcRef.current.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});else queuedIceRef.current.push(p.candidate);}
+    else if(['reject','hangup'].includes(row.signal_type)&&row.recipient_id===myProfile.id&&callRef.current?.callKey===p.callKey){await cleanup('ended');setNotice(tr('অপর পক্ষ কল শেষ করেছেন।','The other person ended the call.'));}
+  }
+  useEffect(()=>{
+    if(!myProfile?.id)return;
+    const channel=supabase.channel('htc-call-inbox-'+myProfile.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'recipient_id=eq.'+myProfile.id},payload=>handleSignal(payload.new))
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'sender_id=eq.'+myProfile.id},payload=>handleSignal(payload.new)).subscribe();
+    return()=>{supabase.removeChannel(channel);cleanup();};
+  },[myProfile?.id]);
+  useEffect(()=>{if(status!=='active')return;const id=setInterval(()=>setSeconds(s=>s+1),1000);return()=>clearInterval(id);},[status]);
+  async function endCall(reject=false){
+    const call=callRef.current||incoming;
+    if(call)await supabase.from('htc_call_signals').insert({conversation_id:call.conversationId||call.conversation_id,sender_id:myProfile.id,recipient_id:call.recipientId||call.sender_id,signal_type:reject?'reject':'hangup',payload:{callKey:call.callKey}});
+    await cleanup('ended');
+  }
+  function toggleMute(){const next=!muted;localRef.current?.getAudioTracks().forEach(t=>t.enabled=!next);setMuted(next);}
+  function toggleCamera(){const next=!cameraOn;localRef.current?.getVideoTracks().forEach(t=>t.enabled=next);setCameraOn(next);}
+  const fmt=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+  return <div className="panel-card" style={{padding:18,display:'grid',gap:14}}>
+    <h3>{tr('নিবন্ধিত ব্যবহারকারীকে কল করুন','Call a registered user')}</h3>
+    <select value={targetId} onChange={e=>setTargetId(e.target.value)} style={{padding:13,borderRadius:10}}><option value="">{tr('প্রাইভেট চ্যাট নির্বাচন করুন','Choose a private chat')}</option>{privateChats.map(c=><option key={c.id} value={c.id}>{c.title||c.members?.find(m=>m.user_id!==myProfile?.id)?.user_id}</option>)}</select>
+    <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="feature-primary" disabled={!peerId||status==='calling'||status==='active'} onClick={()=>startCall('audio')}><Phone size={17}/> {tr('অডিও কল','Audio call')}</button><button className="feature-primary" disabled={!peerId||status==='calling'||status==='active'} onClick={()=>startCall('video')}><Video size={17}/> {tr('ভিডিও কল','Video call')}</button></div>
+    {incoming&&<div className="feature-notice"><b>{tr('ইনকামিং কল','Incoming call')}</b><div style={{display:'flex',gap:8,marginTop:10}}><button className="feature-primary" onClick={acceptCall}>{tr('রিসিভ','Accept')}</button><button onClick={()=>endCall(true)}>{tr('রিজেক্ট','Reject')}</button></div></div>}
+    {status!=='idle'&&<div style={{display:'grid',gap:10}}><b>{status==='active'?tr('কল চলছে','Call connected')+' · '+fmt:status==='ringing'?tr('কল আসছে','Incoming call'):status==='calling'?tr('কল করা হচ্ছে...','Calling...'):status==='ended'?tr('কল শেষ','Call ended'):tr('সংযোগ হচ্ছে...','Connecting...')}</b><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><video ref={localVideoRef} autoPlay muted playsInline style={{width:'100%',background:'#111',borderRadius:10}}/><video ref={remoteRef} autoPlay playsInline style={{width:'100%',background:'#111',borderRadius:10}}/></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button onClick={toggleMute}>{muted?tr('মাইক চালু','Unmute'):tr('মাইক বন্ধ','Mute')}</button>{mode==='video'&&<button onClick={toggleCamera}>{cameraOn?tr('ক্যামেরা বন্ধ','Camera off'):tr('ক্যামেরা চালু','Camera on')}</button>}<button onClick={()=>endCall(false)}>{tr('কল কেটে দিন','Hang up')}</button></div></div>}
+    {notice&&<div className="feature-notice">{notice}</div>}
+    <small>{tr('ক্যামেরা ও মাইক্রোফোন অনুমতি চাইবে। কিছু নেটওয়ার্কে ফ্রি STUN সংযোগ ব্যর্থ হতে পারে।','Camera and microphone permission will be requested. Free STUN may fail on some networks.')}</small>
+  </div>;
+}
+
+function FeatureWorkspace({ active, lang, groups = [], myProfile, conversations = [], onCreateGroup, onOpenGroup, onAddGroupMembers }) {
   const tr = (bn,en) => lang === 'bn' ? bn : en;
   const [groupPhones,setGroupPhones] = useState('');
   const [groupName,setGroupName] = useState('');
@@ -234,12 +317,7 @@ function FeatureWorkspace({ active, lang, groups = [], myProfile, onCreateGroup,
       {notice&&<div className="feature-notice">{notice}</div>}
       {pendingInvitePhones&&<div className="feature-notice"><button className="feature-primary" type="button" onClick={sendPendingInvites}>{tr('অনিবন্ধিত নম্বরে আমন্ত্রণ পাঠান','Invite unregistered numbers')}</button><button type="button" onClick={()=>setPendingInvitePhones('')}>{tr('এখন নয়','Not now')}</button></div>}
     </>}
-    {isCalls && <>
-      <div className="call-action-grid"><button className="call-action audio" onClick={()=>setNotice(tr('অডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Audio call interface is ready. A calling service connection is required to place calls.'))}><span><Phone size={25}/></span><b>{tr('অডিও কল','Audio call')}</b><small>{tr('শুধু কথা বলুন','Voice only')}</small></button><button className="call-action video" onClick={()=>setNotice(tr('ভিডিও কলের ইন্টারফেস প্রস্তুত। কল চালু করতে কল সার্ভিস সংযোগ প্রয়োজন।','Video call interface is ready. A calling service connection is required to place calls.'))}><span><Video size={25}/></span><b>{tr('ভিডিও কল','Video call')}</b><small>{tr('সামনাসামনি কথা বলুন','Face to face')}</small></button><button className="call-action group-call" onClick={()=>setNotice(tr('গ্রুপ কলের ইন্টারফেস প্রস্তুত। একাধিক অংশগ্রহণকারীর জন্য কল সার্ভিস প্রয়োজন।','Group call interface is ready. A calling service is required for multiple participants.'))}><span><Users size={25}/></span><b>{tr('গ্রুপ কল','Group call')}</b><small>{tr('একসাথে কথা বলুন','Talk together')}</small></button></div>
-      <div className="feature-toolbar"><div><h3>{tr('সাম্প্রতিক কল','Recent calls')}</h3><p>{tr('আপনার কল হিস্ট্রি এখানে দেখা যাবে','Your call history will appear here')}</p></div></div>
-      <div className="call-empty panel-card"><div className="feature-item-icon blue"><Phone size={24}/></div><b>{tr('এখনো কোনো কল নেই','No calls yet')}</b><span>{tr('কল চালু হলে তারিখ, সময় ও কলের ধরন এখানে জমা হবে।','Call date, time and type will be listed here when calling is connected.')}</span></div>
-      {notice&&<div className="feature-notice">{notice}</div>}
-    </>}
+    {isCalls && <CallCenter lang={lang} myProfile={myProfile} conversations={conversations}/>}
     {!isGroups&&!isCalls && <>
       <div className="private-layout"><div className="private-info panel-card"><div className="private-lock"><LockKeyhole size={34}/></div><h3>{tr('আপনার ব্যক্তিগত নিরাপদ জায়গা','Your private space')}</h3><p>{tr('প্রাইভেট চ্যাটের জন্য আলাদা গোপন কোডের ইন্টারফেস। আসল মেসেজ ও এনক্রিপশন চালুর আগে সার্ভার সুরক্ষা যুক্ত করতে হবে।','A separate secret-code interface for private chat. Server-side protection and encryption must be connected before real messages are enabled.')}</p><div className="private-badges"><span><ShieldCheck size={14}/> {tr('কোড প্রবেশ','Code access')}</span><span><LockKeyhole size={14}/> {tr('ব্যক্তিগত','Private')}</span></div></div><form className="private-unlock panel-card" onSubmit={e=>{e.preventDefault();setUnlocked(false);setNotice(tr('ইন্টারফেস প্রস্তুত, তবে নিরাপদ যাচাই সার্ভার এখনো সংযুক্ত নয়।','Interface is ready, but secure server verification is not connected yet.'));}}><span className="feature-kicker">PRIVATE ACCESS</span><h3>{tr('গোপন কোড দিন','Enter secret code')}</h3><p>{tr('আপনার প্রাইভেট চ্যাটে প্রবেশের কোড','Your private chat access code')}</p><input value={secret} onChange={e=>setSecret(e.target.value.slice(0,12))} type="password" placeholder={tr('গোপন কোড','Secret code')} maxLength={12}/><button className="feature-primary" disabled={!secret.trim()} type="submit"><LockKeyhole size={16}/>{tr('প্রবেশ করুন','Unlock')}</button>{notice&&<div className="feature-notice">{notice}</div>}</form></div>
     </>}
@@ -370,7 +448,7 @@ function MainApp({ lang, setLang }) {
           <button type="button" className="apply-theme" style={{marginTop:12,background:'#a83245'}} onClick={async()=>{const {error}=await supabase.auth.signOut();if(error)window.alert(error.message);}}><X size={17}/> {tr('লগআউট করুন','Log out')}</button>
         </div>
       </section>}
-      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers} myProfile={myProfile}/>}
+      {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers} myProfile={myProfile} conversations={conversations}/>}
       <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label))}</span></button>)}</nav>
