@@ -53,7 +53,7 @@ export async function createConversation({ kind, title = '', memberIds = [] }) {
   const me = await getMyProfile();
   const { data: conversation, error } = await supabase
     .from('htc_conversations')
-    .insert({ kind, title: title || null, created_by: me.id })
+    .insert({ kind, title: title || null })
     .select('id,kind,title,created_by,created_at')
     .single();
   if (error) throw error;
