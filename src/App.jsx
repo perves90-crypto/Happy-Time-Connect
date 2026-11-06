@@ -108,6 +108,8 @@ function StoragePanel({ lang }) {
 
 function CallCenter({ lang, myProfile, conversations }) {
   const tr=(bn,en)=>lang==='bn'?bn:en;
+  const [phone,setPhone]=useState('');
+  const [localConversations,setLocalConversations]=useState(conversations);
   const [targetId,setTargetId]=useState('');
   const [mode,setMode]=useState('audio');
   const [status,setStatus]=useState('idle');
@@ -116,13 +118,43 @@ function CallCenter({ lang, myProfile, conversations }) {
   const [muted,setMuted]=useState(false);
   const [cameraOn,setCameraOn]=useState(true);
   const [seconds,setSeconds]=useState(0);
+  const [searching,setSearching]=useState(false);
   const pcRef=useRef(null), localRef=useRef(null), remoteRef=useRef(null), localVideoRef=useRef(null), callRef=useRef(null), queuedIceRef=useRef([]);
-  const privateChats=conversations.filter(c=>c.kind==='private'&&c.members?.some(m=>m.user_id!==myProfile?.id));
+  useEffect(()=>{setLocalConversations(conversations);},[conversations]);
+  const privateChats=localConversations.filter(c=>c.kind==='private'&&c.members?.some(m=>m.user_id!==myProfile?.id));
   const selected=privateChats.find(c=>c.id===targetId);
   const peerId=selected?.members?.find(m=>m.user_id!==myProfile?.id)?.user_id;
+  function normalizedDialNumber(value){
+    const digits=value.replace(/\\D/g,'');
+    if(value.trim().startsWith('+')) return '+'+digits;
+    if(digits.length===11&&digits.startsWith('0')) return '+880'+digits.slice(1);
+    if(digits.length===13&&digits.startsWith('880')) return '+'+digits;
+    if(digits.length>=7&&digits.length<=15) return '+'+digits;
+    throw new Error('সঠিক দেশের কোডসহ মোবাইল নম্বর লিখুন।');
+  }
+  async function findOrCreateChat(){
+    setNotice('');
+    let fullPhone;
+    try{fullPhone=normalizedDialNumber(phone);}catch(e){setNotice(e.message);return;}
+    setSearching(true);
+    try{
+      const user=await findUserByPhone(fullPhone);
+      if(!user){setNotice('এই নম্বরে Happy Time Connect-এ নিবন্ধিত ব্যবহারকারী পাওয়া যায়নি।');return;}
+      if(user.user_id===myProfile.id){setNotice('নিজের নম্বরে কল করা যাবে না।');return;}
+      let chat=privateChats.find(c=>c.members?.some(m=>m.user_id===user.user_id));
+      if(!chat){
+        const created=await createConversation({kind:'private',title:user.display_name||user.phone||fullPhone,memberIds:[user.user_id]});
+        chat={...created,members:[{user_id:myProfile.id},{user_id:user.user_id}]};
+        setLocalConversations(prev=>[chat,...prev]);
+      }
+      setTargetId(chat.id);
+      setNotice((user.display_name||user.phone||fullPhone)+' — কল করার জন্য প্রস্তুত।');
+    }catch(e){setNotice(e.message||'ব্যবহারকারী খোঁজা যায়নি।');}
+    finally{setSearching(false);}
+  }
   async function cleanup(next='idle'){
     try{pcRef.current?.close();}catch{}
-    pcRef.current=null; localRef.current?.getTracks().forEach(t=>t.stop()); localRef.current=null;
+    pcRef.current=null;localRef.current?.getTracks().forEach(t=>t.stop());localRef.current=null;
     if(remoteRef.current)remoteRef.current.srcObject=null;
     if(localVideoRef.current)localVideoRef.current.srcObject=null;
     callRef.current=null;queuedIceRef.current=[];setIncoming(null);setStatus(next);setSeconds(0);
@@ -176,15 +208,28 @@ function CallCenter({ lang, myProfile, conversations }) {
   }
   function toggleMute(){const next=!muted;localRef.current?.getAudioTracks().forEach(t=>t.enabled=!next);setMuted(next);}
   function toggleCamera(){const next=!cameraOn;localRef.current?.getVideoTracks().forEach(t=>t.enabled=next);setCameraOn(next);}
+  function pressDigit(d){setPhone(v=>(v+d).slice(0,18));}
   const fmt=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
   return <div className="panel-card" style={{padding:18,display:'grid',gap:14}}>
-    <h3>{tr('নিবন্ধিত ব্যবহারকারীকে কল করুন','Call a registered user')}</h3>
-    <select value={targetId} onChange={e=>setTargetId(e.target.value)} style={{padding:13,borderRadius:10}}><option value="">{tr('প্রাইভেট চ্যাট নির্বাচন করুন','Choose a private chat')}</option>{privateChats.map(c=><option key={c.id} value={c.id}>{c.title||c.members?.find(m=>m.user_id!==myProfile?.id)?.user_id}</option>)}</select>
+    <h3>{tr('অডিও ও ভিডিও কল','Audio & Video Calls')}</h3>
+    <div style={{display:'grid',gap:8}}>
+      <label>{tr('মোবাইল নম্বর লিখুন','Enter mobile number')}</label>
+      <input value={phone} onChange={e=>setPhone(e.target.value.replace(/[^0-9+ ]/g,'').slice(0,18))} placeholder="01XXXXXXXXX / +8801XXXXXXXXX" inputMode="tel" style={{padding:14,borderRadius:10,fontSize:18}}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,maxWidth:340,margin:'0 auto',width:'100%'}}>
+        {['1','2','3','4','5','6','7','8','9','*','0','#'].map(d=><button type="button" key={d} onClick={()=>pressDigit(d)} style={{padding:13,borderRadius:12,fontSize:20}}>{d}</button>)}
+      </div>
+      <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+        <button type="button" onClick={()=>setPhone(v=>v.slice(0,-1))}>{tr('এক অঙ্ক মুছুন','Backspace')}</button>
+        <button type="button" onClick={()=>setPhone('')}>{tr('মুছুন','Clear')}</button>
+        <button type="button" className="feature-primary" disabled={searching||!phone.trim()} onClick={findOrCreateChat}>{searching?tr('খোঁজা হচ্ছে...','Searching...'):tr('নম্বর খুঁজুন','Find number')}</button>
+      </div>
+    </div>
+    {selected&&<div className="feature-notice">{tr('নির্বাচিত ব্যবহারকারী','Selected user')}: {selected.title||selected.members?.find(m=>m.user_id!==myProfile?.id)?.user_id}</div>}
     <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="feature-primary" disabled={!peerId||status==='calling'||status==='active'} onClick={()=>startCall('audio')}><Phone size={17}/> {tr('অডিও কল','Audio call')}</button><button className="feature-primary" disabled={!peerId||status==='calling'||status==='active'} onClick={()=>startCall('video')}><Video size={17}/> {tr('ভিডিও কল','Video call')}</button></div>
     {incoming&&<div className="feature-notice"><b>{tr('ইনকামিং কল','Incoming call')}</b><div style={{display:'flex',gap:8,marginTop:10}}><button className="feature-primary" onClick={acceptCall}>{tr('রিসিভ','Accept')}</button><button onClick={()=>endCall(true)}>{tr('রিজেক্ট','Reject')}</button></div></div>}
     {status!=='idle'&&<div style={{display:'grid',gap:10}}><b>{status==='active'?tr('কল চলছে','Call connected')+' · '+fmt:status==='ringing'?tr('কল আসছে','Incoming call'):status==='calling'?tr('কল করা হচ্ছে...','Calling...'):status==='ended'?tr('কল শেষ','Call ended'):tr('সংযোগ হচ্ছে...','Connecting...')}</b><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><video ref={localVideoRef} autoPlay muted playsInline style={{width:'100%',background:'#111',borderRadius:10}}/><video ref={remoteRef} autoPlay playsInline style={{width:'100%',background:'#111',borderRadius:10}}/></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button onClick={toggleMute}>{muted?tr('মাইক চালু','Unmute'):tr('মাইক বন্ধ','Mute')}</button>{mode==='video'&&<button onClick={toggleCamera}>{cameraOn?tr('ক্যামেরা বন্ধ','Camera off'):tr('ক্যামেরা চালু','Camera on')}</button>}<button onClick={()=>endCall(false)}>{tr('কল কেটে দিন','Hang up')}</button></div></div>}
     {notice&&<div className="feature-notice">{notice}</div>}
-    <small>{tr('ক্যামেরা ও মাইক্রোফোন অনুমতি চাইবে। কিছু নেটওয়ার্কে ফ্রি STUN সংযোগ ব্যর্থ হতে পারে।','Camera and microphone permission will be requested. Free STUN may fail on some networks.')}</small>
+    <small>{tr('ক্যামেরা ও মাইক্রোফোনের অনুমতি চাইবে। উভয় ব্যবহারকারীকে অনলাইনে থাকতে হবে; কিছু নেটওয়ার্কে অতিরিক্ত TURN সার্ভার প্রয়োজন হতে পারে।','Camera and microphone permission will be requested. Both users need to be online; some networks may require a TURN server.')}</small>
   </div>;
 }
 
