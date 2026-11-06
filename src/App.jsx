@@ -200,8 +200,22 @@ function CallCenter({ lang, myProfile, conversations }) {
   useEffect(()=>{
     if(!myProfile?.id)return;
     const channel=supabase.channel('htc-call-inbox-'+myProfile.id)
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'recipient_id=eq.'+myProfile.id},payload=>handleSignal(payload.new))
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'sender_id=eq.'+myProfile.id},payload=>handleSignal(payload.new)).subscribe();
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'recipient_id=eq.'+myProfile.id},payload=>{
+        console.log('[HTC CALL] Incoming signal received:',payload.new?.signal_type,payload.new?.id);
+        handleSignal(payload.new);
+      })
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'htc_call_signals',filter:'sender_id=eq.'+myProfile.id},payload=>{
+        console.log('[HTC CALL] Own signal received:',payload.new?.signal_type,payload.new?.id);
+        handleSignal(payload.new);
+      })
+      .subscribe((status,error)=>{
+        console.log('[HTC CALL] Realtime subscription:',status,error||'');
+        if(status==='SUBSCRIBED'){
+          setNotice('কল নেটওয়ার্ক প্রস্তুত। এখন কল করা যাবে।');
+        }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+          setNotice('কলের Realtime সংযোগ ব্যর্থ: '+status+(error?.message?' — '+error.message:''));
+        }
+      });
     return()=>{supabase.removeChannel(channel);cleanup();};
   },[myProfile?.id]);
   useEffect(()=>{if(status!=='active')return;const id=setInterval(()=>setSeconds(s=>s+1),1000);return()=>clearInterval(id);},[status]);
