@@ -6,7 +6,7 @@ const permissions = [
   'android.permission.INTERNET',
   'android.permission.CAMERA',
   'android.permission.RECORD_AUDIO',
-  'android.permission.MODIFY_AUDIO_SETTINGS'
+  'android.permission.MODIFY_AUDIO_SETTINGS',\n  'android.permission.POST_NOTIFICATIONS'
 ];
 
 for (const permission of permissions) {
