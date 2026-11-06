@@ -350,7 +350,30 @@ function MainApp({ lang, setLang }) {
     setMyProfile(profile); setConversations(rows);
     setSelectedConversation(current => current && rows.some(row => row.id === current.id) ? rows.find(row => row.id === current.id) : (rows[0] || null));
   }
-  useEffect(() => { let alive = true; refreshConversations().catch(error => { if (alive) setChatError(error.message || 'Chat service is not ready.'); }); return () => { alive = false; }; }, []);
+  useEffect(() => {
+    let alive = true;
+    refreshConversations().catch(error => { if (alive) setChatError(error.message || 'Chat service is not ready.'); });
+    return () => { alive = false; };
+  }, []);
+  // Keep the conversation list in sync when another member adds this user to a group.
+  useEffect(() => {
+    if (!myProfile?.id) return;
+    const refresh = () => refreshConversations().catch(error => setChatError(error.message || 'Could not refresh conversations.'));
+    const channel = supabase.channel('htc-membership-inbox-' + myProfile.id)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'htc_conversation_members',
+        filter: 'user_id=eq.' + myProfile.id
+      }, refresh)
+      .subscribe();
+    const timer = window.setInterval(refresh, 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      supabase.removeChannel(channel);
+    };
+  }, [myProfile?.id]);
   useEffect(() => {
     if (!selectedConversation) { setChatMessages([]); return; }
     let alive = true;
