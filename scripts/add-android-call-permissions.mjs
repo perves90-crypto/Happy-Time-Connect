@@ -6,15 +6,16 @@ const permissions = [
   'android.permission.INTERNET',
   'android.permission.CAMERA',
   'android.permission.RECORD_AUDIO',
-  'android.permission.MODIFY_AUDIO_SETTINGS',\n  'android.permission.POST_NOTIFICATIONS'
+  'android.permission.MODIFY_AUDIO_SETTINGS',
+  'android.permission.POST_NOTIFICATIONS'
 ];
 
 for (const permission of permissions) {
-  const declaration = `    <uses-permission android:name="${permission}" />`;
-  if (!manifest.includes(`android:name="${permission}"`)) {
-    manifest = manifest.replace('<application', `${declaration}\n    <application`);
+  const declaration = \`    <uses-permission android:name="\${permission}" />\`;
+  if (!manifest.includes(\`android:name="\${permission}"\`)) {
+    manifest = manifest.replace('<application', \`\${declaration}\\n    <application\`);
   }
 }
 
 writeFileSync(manifestPath, manifest);
-console.log('Android camera, microphone, internet and audio permissions are configured.');
+console.log('Android camera, microphone, internet and notification permissions are configured.');
