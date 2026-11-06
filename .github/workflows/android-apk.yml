@@ -11,6 +11,9 @@ on:
       - 'capacitor.config.json'
       - '.github/workflows/android-apk.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -49,6 +52,14 @@ jobs:
             echo 'networkTimeout=120000' >> gradle/wrapper/gradle-wrapper.properties
           fi
           ./gradlew assembleDebug
+      - name: Publish direct APK download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          name: Happy Time Connect Android APK ${{ github.run_number }}
+          prerelease: true
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
