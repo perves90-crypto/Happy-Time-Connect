@@ -8,7 +8,8 @@ export async function getMyProfile() {
   return {
     id: user.id,
     phone: user.user_metadata?.phone || '',
-    displayName: user.user_metadata?.display_name || user.user_metadata?.phone || 'User'
+    displayName: user.user_metadata?.display_name || user.user_metadata?.phone || 'User',
+    profileName: user.user_metadata?.profile_name || user.user_metadata?.display_name || user.user_metadata?.phone || 'User'
   };
 }
 
