@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getMyProfile, findUserByPhone, listMyConversations, createConversation, addConversationMember, fetchMessages, sendMessage, subscribeToMessages } from './lib/chatService';
 import { saveLocalFile, listLocalFiles, deleteLocalFile, getLocalFileBlob, VAULT_CATEGORIES, isNativeVault, listenForChatDownloads } from './lib/localVault';
-import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw, QrCode, Contact, UserPlus, Camera, X } from 'lucide-react';
+import { MessageCircle, Users, Phone, Video, LockKeyhole, Folder, Settings, Search, Plus, Send, Paperclip, Mic, ShieldCheck, Cloud, Smartphone, Menu, Palette, Check, RotateCcw, QrCode, Contact, UserPlus, Camera, X, Bell, User, LogOut, Shield, CircleDot, Save, ImagePlus } from 'lucide-react';
 import QRCode from 'qrcode';
 
 const initialChats = [
@@ -336,6 +336,38 @@ function MainApp({ lang, setLang }) {
   const [chatBusy,setChatBusy] = useState(false);
   const [chatError,setChatError] = useState('');
   const [mobileMenu,setMobileMenu] = useState(false);
+  const [accountMenuOpen,setAccountMenuOpen] = useState(false);
+  const [accountSection,setAccountSection] = useState('profile');
+  const [profileName,setProfileName] = useState('');
+  const [profileDisplayName,setProfileDisplayName] = useState('');
+  const [profilePhoto,setProfilePhoto] = useState('');
+  const [accountStatus,setAccountStatus] = useState(()=>localStorage.getItem('htc-account-status')||'online');
+  const [notificationPrefs,setNotificationPrefs] = useState(()=>JSON.parse(localStorage.getItem('htc-notification-prefs')||'{"messages":true,"groups":true,"calls":true,"sound":true}'));
+  const [accountNotice,setAccountNotice] = useState('');
+  const [accountError,setAccountError] = useState('');
+  const [newPassword,setNewPassword] = useState('');
+  const [profileSaving,setProfileSaving] = useState(false);
+  useEffect(()=>{if(myProfile?.id){setProfileName(myProfile.profileName||myProfile.displayName||'');setProfileDisplayName(myProfile.displayName||'');setProfilePhoto(localStorage.getItem('htc-profile-photo-'+myProfile.id)||'');}},[myProfile?.id]);
+  useEffect(()=>{localStorage.setItem('htc-account-status',accountStatus);},[accountStatus]);
+  useEffect(()=>{localStorage.setItem('htc-notification-prefs',JSON.stringify(notificationPrefs));},[notificationPrefs]);
+  async function saveAccountProfile(){
+    setProfileSaving(true);setAccountError('');setAccountNotice('');
+    try{const {error}=await supabase.auth.updateUser({data:{display_name:profileDisplayName.trim()||profileName.trim(),profile_name:profileName.trim()}});if(error)throw error;
+      setMyProfile(p=>({...p,displayName:profileDisplayName.trim()||profileName.trim(),profileName:profileName.trim()}));setAccountNotice(tr('প্রোফাইলের নাম সেভ হয়েছে।','Profile details saved.'));
+    }catch(e){setAccountError(e.message||'Could not save profile.');}finally{setProfileSaving(false);}
+  }
+  function chooseProfilePhoto(event){
+    const file=event.target.files?.[0];if(!file)return;
+    if(!file.type.startsWith('image/')){setAccountError(tr('শুধু ছবি নির্বাচন করুন।','Please choose an image file.'));return;}
+    if(file.size>2*1024*1024){setAccountError(tr('ছবির সাইজ ২ MB-এর কম হতে হবে।','Image must be smaller than 2 MB.'));return;}
+    const reader=new FileReader();reader.onload=()=>{const value=String(reader.result||'');setProfilePhoto(value);if(myProfile?.id)localStorage.setItem('htc-profile-photo-'+myProfile.id,value);setAccountNotice(tr('এই ফোনে প্রোফাইল ছবি সেট হয়েছে।','Profile photo saved on this device.'));};reader.readAsDataURL(file);
+  }
+  async function changeAccountPassword(){
+    setAccountError('');setAccountNotice('');
+    if(!/^[A-Za-z0-9]{6}$/.test(newPassword)){setAccountError(tr('নতুন পাসওয়ার্ড ঠিক ৬ অক্ষরের হতে হবে।','New password must be exactly 6 characters.'));return;}
+    const {error}=await supabase.auth.updateUser({password:newPassword});
+    if(error)setAccountError(error.message);else{setNewPassword('');setAccountNotice(tr('পাসওয়ার্ড পরিবর্তন হয়েছে।','Password updated successfully.'));}
+  }
   const [selectedTheme,setSelectedTheme] = useState(()=>Number(localStorage.getItem('htc-theme')||0));
   const [custom,setCustom] = useState(()=>JSON.parse(localStorage.getItem('htc-custom')||'null') || {background:'#071a24',surface:'#173b46',accent:'#38e0b2'});
   const [useCustom,setUseCustom] = useState(()=>localStorage.getItem('htc-use-custom')==='true');
@@ -440,12 +472,12 @@ function MainApp({ lang, setLang }) {
   return <div className="app-shell" style={vars}>
     <aside className={`sidebar ${mobileMenu?'show':''}`}><div className="language-switch app-language"><button onClick={()=>setLang('bn')} className={lang==='bn'?'active':''}>বাংলা</button><button onClick={()=>setLang('en')} className={lang==='en'?'active':''}>English</button></div>
       <div className="brand"><div className="brand-mark"><MessageCircle size={23}/></div><div><strong>Happy Time</strong><span>CONNECT</span></div></div>
-      <div className="profile-card"><div className="avatar user">HT</div><div><b>{tr('স্বাগতম','Welcome')}</b><small>{tr('আপনার অ্যাকাউন্ট','Your account')}</small></div><span className="online-dot"/></div>
+      <button type="button" className="profile-card profile-card-button" onClick={()=>{setAccountMenuOpen(true);setAccountSection('profile');}}>{profilePhoto?<img className="avatar user profile-card-photo" src={profilePhoto} alt="Profile"/>:<div className="avatar user">HT</div>}<div><b>{profileDisplayName||myProfile?.displayName||tr('স্বাগতম','Welcome')}</b><small>{myProfile?.phone||tr('আপনার অ্যাকাউন্ট','Your account')}</small></div><span className="online-dot"/></button>
       <nav>{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'nav-item active':'nav-item'} onClick={()=>{setActive(id);setMobileMenu(false)}}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'})[label] || label)}</span></button>)}</nav>
       <div className="sidebar-bottom"><ShieldCheck size={17}/><span>{tr('নিরাপদ যোগাযোগ','Secure communication')}</span><button aria-label="Settings" onClick={()=>setActive('settings')}><Settings size={17}/></button></div>
     </aside>
     <main className="main-panel">
-      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">{tr('আপনার যোগাযোগের জায়গা','Your communication space')}</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><div className="avatar user small">HT</div></div></header>
+      <header className="topbar"><button className="icon-btn mobile-only" onClick={()=>setMobileMenu(!mobileMenu)} aria-label="Menu"><Menu/></button><div><p className="eyebrow">{tr('আপনার যোগাযোগের জায়গা','Your communication space')}</p><h1>{title}</h1></div><div className="top-actions"><button className="icon-btn" aria-label="Search"><Search size={19}/></button><button type="button" className="account-avatar-button" aria-label="প্রোফাইল ও সেটিংস" onClick={()=>{setAccountMenuOpen(true);setAccountSection("profile");setAccountNotice("");setAccountError("");}}>{profilePhoto?<img src={profilePhoto} alt="Profile"/>:<span>HT</span>}<i><Settings size={13}/></i></button></div></header>
       {active==='chats'&&<section className={`content-grid ${selectedConversation ? 'has-selected-chat' : ''}`}>
         <div className="chat-list panel-card"><div className="section-heading"><div><h2>{tr('আপনার কথোপকথন','Your conversations')}</h2><p>{tr('ব্যক্তিগত ও গ্রুপ মেসেজ','Personal and group messages')}</p></div><button className="primary-icon" aria-label="New chat" onClick={startPrivateChat} disabled={chatBusy}><Plus size={19}/></button></div>
           <label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={tr('চ্যাট খুঁজুন','Search chats')}/></label>
@@ -472,7 +504,30 @@ function MainApp({ lang, setLang }) {
         </div>
       </section>}
       {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers} myProfile={myProfile} conversations={conversations}/>}
-      <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
+      {accountMenuOpen&&<div className="account-modal-backdrop" role="dialog" aria-modal="true">
+      <section className="account-modal panel-card">
+        <header className="account-modal-header"><div><span className="feature-kicker">HAPPY TIME CONNECT</span><h2>{tr('অ্যাকাউন্ট ও সেটিংস','Account & Settings')}</h2><p>{myProfile?.phone||''}</p></div><button className="icon-btn" onClick={()=>setAccountMenuOpen(false)} aria-label="Close"><X/></button></header>
+        <div className="account-layout"><nav className="account-menu">
+          <button className={accountSection==='profile'?'active':''} onClick={()=>setAccountSection('profile')}><User size={18}/>{tr('প্রোফাইল','Profile')}</button>
+          <button className={accountSection==='notifications'?'active':''} onClick={()=>setAccountSection('notifications')}><Bell size={18}/>{tr('নোটিফিকেশন','Notifications')}</button>
+          <button className={accountSection==='status'?'active':''} onClick={()=>setAccountSection('status')}><CircleDot size={18}/>{tr('স্ট্যাটাস','Status')}</button>
+          <button className={accountSection==='security'?'active':''} onClick={()=>setAccountSection('security')}><Shield size={18}/>{tr('সিকিউরিটি','Security')}</button>
+          <button className="account-logout" onClick={async()=>{const {error}=await supabase.auth.signOut();if(error)setAccountError(error.message);else setAccountMenuOpen(false);}}><LogOut size={18}/>{tr('লগ আউট','Log out')}</button>
+        </nav><div className="account-content">
+          {accountSection==='profile'&&<div className="account-section"><h3>{tr('আপনার প্রোফাইল','Your Profile')}</h3><div className="profile-photo-edit"><div className="profile-photo-large">{profilePhoto?<img src={profilePhoto} alt="Profile"/>:<span>HT</span>}</div><label className="feature-primary"><ImagePlus size={16}/>{tr('ছবি পরিবর্তন','Change photo')}<input type="file" accept="image/*" onChange={chooseProfilePhoto}/></label></div>
+            <label>{tr('পার্সোনাল নেম','Personal Name')}<input className="account-input" value={profileDisplayName} onChange={e=>setProfileDisplayName(e.target.value)} placeholder={tr('আপনার ব্যক্তিগত নাম','Your personal name')}/></label>
+            <label>{tr('প্রোফাইল নেম','Profile Name')}<input className="account-input" value={profileName} onChange={e=>setProfileName(e.target.value)} placeholder={tr('অন্যরা যে নামে দেখবে','Name shown to others')}/></label>
+            <div className="account-readonly"><span>{tr('নিবন্ধিত মোবাইল','Registered mobile')}</span><b>{myProfile?.phone||'—'}</b></div>
+            <button className="feature-primary account-save" onClick={saveAccountProfile} disabled={profileSaving}><Save size={16}/>{profileSaving?tr('সেভ হচ্ছে...','Saving...'):tr('প্রোফাইল সেভ করুন','Save profile')}</button>
+          </div>}
+          {accountSection==='notifications'&&<div className="account-section"><h3>{tr('নোটিফিকেশন সেটিংস','Notification Settings')}</h3><p>{tr('কোন ধরনের নোটিফিকেশন অ্যাপে অনুমোদন থাকবে তা নির্বাচন করুন।','Choose which notification types are enabled in the app.')}</p>{[['messages','মেসেজ নোটিফিকেশন','Message notifications'],['groups','গ্রুপ আপডেট','Group updates'],['calls','কল নোটিফিকেশন','Call notifications'],['sound','নোটিফিকেশন সাউন্ড','Notification sound']].map(([key,bn,en])=><label className="account-toggle" key={key}><span>{tr(bn,en)}</span><input type="checkbox" checked={!!notificationPrefs[key]} onChange={e=>setNotificationPrefs(p=>({...p,[key]:e.target.checked}))}/></label>)}<small>{tr('এগুলো অ্যাপের নোটিফিকেশন পছন্দ সংরক্ষণ করে; ব্যাকগ্রাউন্ড Push Notification আলাদাভাবে যুক্ত করতে হবে।','These save your in-app preferences; background push notifications require a separate integration.')}</small></div>}
+          {accountSection==='status'&&<div className="account-section"><h3>{tr('আপনার স্ট্যাটাস','Your Status')}</h3><p>{tr('অন্যদের কাছে আপনার বর্তমান উপস্থিতি নির্বাচন করুন।','Choose your presence status.')}</p>{[['online','অনলাইন','Online'],['busy','ব্যস্ত','Busy'],['away','অনুপস্থিত','Away'],['invisible','অফলাইন দেখান','Appear offline']].map(([value,bn,en])=><button key={value} className={accountStatus===value?'account-status-option selected':'account-status-option'} onClick={()=>setAccountStatus(value)}><span className={'status-dot '+value}/>{tr(bn,en)}{accountStatus===value&&<Check size={17}/>}</button>)}</div>}
+          {accountSection==='security'&&<div className="account-section"><h3>{tr('অ্যাকাউন্ট সিকিউরিটি','Account Security')}</h3><div className="account-readonly"><span>{tr('লগইন মোবাইল','Login mobile')}</span><b>{myProfile?.phone||'—'}</b></div><label>{tr('নতুন ৬ অক্ষরের পাসওয়ার্ড','New 6-character password')}<input className="account-input" value={newPassword} onChange={e=>setNewPassword(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,6))} type="password" maxLength={6} placeholder="••••••"/></label><button className="feature-primary account-save" onClick={changeAccountPassword}>{tr('পাসওয়ার্ড পরিবর্তন করুন','Update password')}</button><div className="account-readonly"><span>{tr('সেশন সুরক্ষা','Session security')}</span><b>{tr('সুপাবেস অথেনটিকেশন','Supabase Authentication')}</b></div><small>{tr('আপনার পাসওয়ার্ড কাউকে দেবেন না। লগ আউট করলে এই ডিভাইসের সেশন বন্ধ হবে।','Never share your password. Logging out ends this device session.')}</small></div>}
+          {accountNotice&&<div className="vault-success">{accountNotice}</div>}{accountError&&<div className="vault-error">{accountError}</div>}
+        </div></div>
+      </section>
+    </div>}
+    <footer className="footer-note">Happy Time Connect <span>•</span> {tr('প্রাথমিক সংস্করণ 0.2','Early version 0.2')}</footer>
     </main>
     <nav className="mobile-nav">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'selected':''} onClick={()=>setActive(id)}><Icon size={19}/><span>{tr(label, ({'চ্যাট':'Chats','গ্রুপ':'Groups','কল':'Calls','স্টোরেজ':'Storage','প্রাইভেট':'Private','থিম ও সেটিংস':'Themes & Settings'}[label] || label))}</span></button>)}</nav>
   </div>;
