@@ -1,8 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
-const encoded = process.env.GOOGLE_SERVICES_JSON_BASE64;
-if (!encoded) throw new Error('Missing GitHub Actions secret GOOGLE_SERVICES_JSON_BASE64.');
-const json = Buffer.from(encoded, 'base64').toString('utf8');
+const json = process.env.GOOGLE_SERVICES_JSON;
+if (!json) throw new Error('Missing GitHub Actions secret GOOGLE_SERVICES_JSON.');
 const config = JSON.parse(json);
 if (config.project_info?.project_id !== 'happy-time-connect') {
   throw new Error('google-services.json is not for happy-time-connect.');
