@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'scripts/**'
       - 'package.json'
       - 'capacitor.config.ts'
       - 'capacitor.config.json'
@@ -52,17 +53,24 @@ jobs:
             echo 'networkTimeout=120000' >> gradle/wrapper/gradle-wrapper.properties
           fi
           ./gradlew assembleDebug
+      - name: Verify APK package and signature
+        working-directory: android
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/aapt dump badging app/build/outputs/apk/debug/app-debug.apk | head -n 5
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Happy-Time-Connect.apk
       - name: Publish direct APK download
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-${{ github.run_number }}
           name: Happy Time Connect Android APK ${{ github.run_number }}
           prerelease: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/debug/Happy-Time-Connect.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: happy-time-connect-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/Happy-Time-Connect.apk
           if-no-files-found: error
