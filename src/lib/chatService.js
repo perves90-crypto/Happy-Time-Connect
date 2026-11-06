@@ -51,16 +51,14 @@ export async function listMyConversations() {
 
 export async function createConversation({ kind, title = '', memberIds = [] }) {
   const me = await getMyProfile();
-  const { data: conversation, error } = await supabase
-    .from('htc_conversations')
-    .insert({ kind, title: title || null, created_by: me.id })
-    .select('id,kind,title,created_by,created_at')
-    .single();
+  // Create the conversation and its owner membership atomically through a
+  // SECURITY DEFINER RPC, avoiding client-side RLS policy conflicts.
+  const { data: conversation, error } = await supabase.rpc('htc_create_conversation', {
+    p_kind: kind,
+    p_title: title || null
+  });
   if (error) throw error;
   const uniqueIds = [...new Set([me.id, ...memberIds])];
-  const { error: ownerError } = await supabase.from('htc_conversation_members')
-    .insert({ conversation_id: conversation.id, user_id: me.id, member_role: 'owner' });
-  if (ownerError) throw ownerError;
   for (const userId of uniqueIds.filter(id => id !== me.id)) {
     const { error: addError } = await supabase.rpc('htc_add_conversation_member', {
       p_conversation_id: conversation.id, p_user_id: userId, p_role: 'member'
