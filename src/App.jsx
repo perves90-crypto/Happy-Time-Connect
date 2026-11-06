@@ -346,6 +346,7 @@ function MainApp({ lang, setLang }) {
           <div className="manual-colors">{[['background','Background Color'],['surface','Card / Panel Color'],['accent','Accent / Button Color']].map(([key,label])=><label className="manual-color" key={key}><span>{label}</span><input type="color" value={custom[key]} onChange={e=>{setCustom(v=>({...v,[key]:e.target.value}));setUseCustom(true)}}/><code>{custom[key]}</code></label>)}</div>
           <div className="theme-preview"><div className="preview-bubble">{tr('এটি আপনার থিমের নমুনা','This is a theme preview')}</div><button className="preview-button">{tr('নমুনা বাটন','Preview Button')}</button></div>
           <button className="apply-theme" onClick={()=>{setUseCustom(true);localStorage.setItem('htc-use-custom','true')}}><Check size={17}/> {tr('আমার থিম সেভ করুন','Save my theme')}</button>
+          <button type="button" className="apply-theme" style={{marginTop:12,background:'#a83245'}} onClick={async()=>{const {error}=await supabase.auth.signOut();if(error)window.alert(error.message);}}><X size={17}/> {tr('লগআউট করুন','Log out')}</button>
         </div>
       </section>}
       {active==='storage'&&<StoragePanel lang={lang}/>} {active!=='chats'&&active!=='settings'&&active!=='storage'&&<FeatureWorkspace active={active} lang={lang} groups={conversations.filter(c=>c.kind==='group')} onCreateGroup={createGroupFromForm} onOpenGroup={group=>{setSelectedConversation(group);setActive('chats');}} onAddGroupMembers={addGroupMembers} myProfile={myProfile}/>}
